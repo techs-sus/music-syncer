@@ -3,7 +3,7 @@ mod error;
 mod metadata;
 
 use std::{
-	collections::HashSet,
+	collections::HashMap,
 	io::BufWriter,
 	path::{Path, PathBuf},
 };
@@ -19,7 +19,7 @@ use reqwest::{
 use server::ytmusic::YouTubeMusicClient;
 use tracing::{info, warn};
 
-use crate::database::{Database, PoolConcurrencyOptions};
+use crate::database::{Database, PoolConcurrencyOptions, TrackResult};
 
 /// https://sqlite.org/pragma.html#pragma_application_id
 pub const SQLITE_APPLICATION_ID: u32 = 0x7D8A4B83;
@@ -177,13 +177,13 @@ impl Playlist {
 	async fn sync_from_youtube_single_track(
 		&self,
 		playlist_ordered_position: i64,
-		track: Track,
-		already_existing_track_ids: &HashSet<String>,
+		track: &Track,
+		track_result: TrackResult,
 	) -> Result<(), Error> {
 		// let playlist_ordered_position = playlist_ordered_position as i64;
 		let youtube_video_id = track.id.key();
 
-		if already_existing_track_ids.contains(&*youtube_video_id)
+		if let TrackResult::AlreadyExists(existing_position) = track_result
 			&& let Ok(true) = tokio::fs::try_exists(
 				self
 					.folder
@@ -192,10 +192,11 @@ impl Playlist {
 					.with_extension("m4a"),
 			)
 			.await
+			&& existing_position == playlist_ordered_position
 		{
-			// update track position as it may have changed in the upstream
+			// update track position as it has changed in the upstream
 			info!(
-				"track id {} already exists, not fetching from youtube",
+				"track id {} already exists, not fetching from youtube, updating track position",
 				&youtube_video_id
 			);
 
@@ -265,18 +266,20 @@ impl Playlist {
 			.await
 			.map_err(Error::UpstreamGettingPlaylistEntries)?;
 
-		let already_existing_track_ids = self.database.diff_existing_tracks(&tracks).await?;
+		let diff = self.database.diff_tracks(&tracks).await?;
 
 		let mut successes: usize = 0;
 		let mut failures: usize = 0;
 
-		for res in futures::stream::iter(tracks.into_iter().enumerate().map(
+		for res in futures::stream::iter(tracks.iter().enumerate().map(
 			|(playlist_ordered_position, track)| {
+				let result = diff.get(&*track.id.key()).unwrap().clone();
+
 				self.sync_from_youtube_single_track(
 					// usize -> i64 is usually non overflowing for music playlists
 					playlist_ordered_position as i64,
 					track,
-					&already_existing_track_ids,
+					result,
 				)
 			},
 		))
@@ -295,8 +298,38 @@ impl Playlist {
 			}
 		}
 
-		info!("successfully synced {successes} tracks from youtube");
-		warn!("failed syncing {failures} tracks from youtube");
+		let tracks = tracks
+			.into_iter()
+			.enumerate()
+			.map(|(position, track)| (track.id.key().to_string(), (position as i64, track)))
+			.collect::<HashMap<_, _>>();
+
+		info!("SUMMARY:");
+		for (track_id, (incoming_position, track)) in tracks {
+			let Some(result) = diff.get(&track_id) else {
+				continue;
+			};
+
+			let track_identifier = format!("{} by {}", track.title, track.artist);
+
+			match result {
+				TrackResult::AlreadyExists(old_position) => {
+					// TODO: detect position changes
+					if *old_position != incoming_position {
+						info!("~@ pos {old_position} -> pos {incoming_position}: {track_identifier}")
+					}
+				}
+				TrackResult::Added => {
+					info!("+@ pos {incoming_position}: {track_identifier}")
+				}
+				TrackResult::Removed => {
+					info!("-@ pos {incoming_position}: {track_identifier}")
+				}
+			}
+		}
+
+		info!("Successfully synced {successes} tracks from youtube");
+		warn!("Failed syncing {failures} tracks from youtube");
 
 		Ok(())
 	}

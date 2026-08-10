@@ -1,4 +1,4 @@
-use std::{collections::HashSet, io::Write, path::Path};
+use std::{collections::HashMap, io::Write, path::Path};
 
 use crate::error::Error;
 use clap::value_parser;
@@ -24,6 +24,16 @@ pub struct PoolConcurrencyOptions {
 
 pub struct Database {
 	pool: SqlitePool,
+}
+
+#[derive(PartialEq, Clone)]
+pub enum TrackResult {
+	/// tracks has it and db also does
+	AlreadyExists(i64),
+	/// neither tracks or db have it
+	Removed,
+	/// tracks has it but db does not
+	Added,
 }
 
 impl Database {
@@ -117,10 +127,10 @@ impl Database {
 	}
 
 	/// Returns a [`HashSet`] of the already existing tracks in the database.
-	pub async fn diff_existing_tracks(
+	pub async fn diff_tracks(
 		&self,
-		tracks: &[Track],
-	) -> Result<HashSet<String>, sqlx::Error> {
+		incoming_tracks: &[Track],
+	) -> Result<HashMap<String, TrackResult>, sqlx::Error> {
 		// acquire a connection from the pool
 		// must use a transaction because temp table is per connection not per database
 		let mut tx = self.pool.begin().await?;
@@ -133,16 +143,20 @@ impl Database {
 		.execute(&mut *tx)
 		.await?;
 
-		for track in tracks {
+		let mut tracks = HashMap::with_capacity(incoming_tracks.len());
+
+		for track in incoming_tracks {
 			// sqlx has an automatic prepare cache, so no need to prepare here
 			sqlx::query("INSERT OR IGNORE INTO incoming_tracks (youtube_video_id) VALUES (?1)")
 				.bind(track.id.key())
 				.execute(&mut *tx)
 				.await?;
+
+			tracks.insert(track.id.key().to_string(), TrackResult::Added);
 		}
 
 		let already_existing_track_ids = sqlx::query(
-			"SELECT s.youtube_video_id
+			"SELECT s.youtube_video_id, s.position
 				FROM tracks s
 				JOIN incoming_tracks t ON t.youtube_video_id = s.youtube_video_id;
 			",
@@ -150,8 +164,28 @@ impl Database {
 		.fetch_all(&mut *tx)
 		.await?
 		.into_iter()
-		.map(|row| row.get::<String, _>(0))
-		.collect::<HashSet<_>>();
+		.map(|row| (row.get::<String, _>(0), row.get::<i64, _>(1)));
+
+		let removed_track_ids = sqlx::query(
+			"
+			SELECT t.youtube_video_id FROM incoming_tracks t
+			LEFT JOIN tracks s
+				ON s.youtube_video_id = t.youtube_video_id
+			WHERE s.youtube_video_id IS NULL;
+			",
+		)
+		.fetch_all(&mut *tx)
+		.await?
+		.into_iter()
+		.map(|row| row.get::<String, _>(0));
+
+		for (key, position) in already_existing_track_ids {
+			tracks.insert(key, TrackResult::AlreadyExists(position));
+		}
+
+		for key in removed_track_ids {
+			tracks.insert(key, TrackResult::Removed);
+		}
 
 		// clean temporary table to increase performance
 		sqlx::query("DELETE FROM incoming_tracks;")
@@ -160,7 +194,7 @@ impl Database {
 
 		tx.commit().await?;
 
-		Ok(already_existing_track_ids)
+		Ok(tracks)
 	}
 
 	pub async fn insert_or_update_track(

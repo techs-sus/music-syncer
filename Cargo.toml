@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-clap = { version = "4.6.5", features = ["derive"] }
+clap = { version = "4.6.6", features = ["derive"] }
 kopuz-server = { git = "https://github.com/techs-sus/kopuz" }
 kopuz-reader = { git = "https://github.com/techs-sus/kopuz" }
-lofty = "0.24.0"
+lofty = "0.25.0"
 mime2ext = "0.1.54"
 pathdiff = "0.2.3"
 reqwest = { version = "0.13.4", features = ["rustls"] }
-thiserror = "2.0.19"
+thiserror = "2.0.20"
 sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "sqlite"] }
 tokio = { version = "1.53.1", default-features = false, features = [
 	"rt",
