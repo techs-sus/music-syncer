@@ -183,7 +183,7 @@ impl Playlist {
 		// let playlist_ordered_position = playlist_ordered_position as i64;
 		let youtube_video_id = track.id.key();
 
-		if let TrackResult::AlreadyExists(existing_position) = track_result
+		if let TrackResult::AlreadyExists(..) = track_result
 			&& let Ok(true) = tokio::fs::try_exists(
 				self
 					.folder
@@ -192,7 +192,6 @@ impl Playlist {
 					.with_extension("m4a"),
 			)
 			.await
-			&& existing_position == playlist_ordered_position
 		{
 			// update track position as it has changed in the upstream
 			info!(
