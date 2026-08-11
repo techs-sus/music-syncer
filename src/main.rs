@@ -140,9 +140,11 @@ impl Playlist {
 			.join(video_id)
 			.with_extension(stream_info.format.extension());
 
-		// if the file was already downloaded, don't refetch it
-		match tokio::fs::try_exists(&audio_path).await {
-			Ok(true) => {}
+		let maybe_m4a_path = audio_path.with_extension("m4a");
+
+		// if the file was already downloaded as an m4a, don't refetch it
+		match tokio::fs::try_exists(&maybe_m4a_path).await {
+			Ok(true) => return Ok((maybe_m4a_path, stream_info.user_agent)),
 
 			_ => {
 				let response = self
