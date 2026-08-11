@@ -63,6 +63,14 @@ impl Playlist {
 			return Err(Error::PlaylistHasNoParentFolder);
 		};
 
+		let mut client_builder = RustyPipe::builder();
+
+		if let Some(cache_dir) = dirs::cache_dir() {
+			client_builder = client_builder.storage_dir(cache_dir);
+		}
+
+		let client = client_builder.build()?;
+
 		let folder = tokio::fs::canonicalize(folder).await?;
 
 		let _ = tokio::fs::create_dir(folder.join("audio")).await;
@@ -71,7 +79,7 @@ impl Playlist {
 		Ok(Self {
 			database: Database::open(path.as_ref(), &concurrency_options.pool).await?,
 			folder,
-			client: RustyPipe::builder().storage_dir("/tmp").build()?,
+			client,
 			reqwest_client: Client::new(),
 			name: path
 				.as_ref()
