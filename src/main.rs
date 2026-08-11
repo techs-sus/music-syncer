@@ -181,6 +181,11 @@ impl Playlist {
 		// let playlist_ordered_position = playlist_ordered_position as i64;
 		let youtube_video_id = track.id.key();
 
+		if let TrackStatus::Removed = track_result {
+			self.database.remove_track(&*youtube_video_id).await?;
+			return Ok(());
+		};
+
 		if let TrackStatus::AlreadyExists(..) = track_result
 			&& let Ok(true) = tokio::fs::try_exists(
 				self

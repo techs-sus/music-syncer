@@ -29,8 +29,9 @@ pub struct Database {
 #[derive(Clone)]
 pub enum TrackStatus {
 	/// incoming tracks have it and db also does
+	/// does not guarantee that the audio_path exists
 	AlreadyExists(/* position in database */ i64),
-	/// neither incoming tracks or db have it
+	/// only the database has it
 	Removed,
 	/// incoming tracks have it but db does not
 	Added,
@@ -176,7 +177,12 @@ impl Database {
 		.into_iter()
 		.map(|row| (row.get::<String, _>(0), row.get::<i64, _>(1)));
 
-		let removed_track_ids = sqlx::query(
+		for (key, position) in already_existing_track_ids {
+			tracks.insert(key, TrackStatus::AlreadyExists(position));
+		}
+
+		// incoming_tracks has it, tracks doesn't
+		let new_track_ids = sqlx::query(
 			"
 			SELECT t.youtube_video_id FROM incoming_tracks t
 			LEFT JOIN tracks s
@@ -189,9 +195,23 @@ impl Database {
 		.into_iter()
 		.map(|row| row.get::<String, _>(0));
 
-		for (key, position) in already_existing_track_ids {
-			tracks.insert(key, TrackStatus::AlreadyExists(position));
+		for key in new_track_ids {
+			tracks.insert(key, TrackStatus::Added);
 		}
+
+		// tracks has it, incoming_tracks doesn't
+		let removed_track_ids = sqlx::query(
+			"
+			SELECT s.youtube_video_id FROM tracks s
+			LEFT JOIN tracks t
+				ON t.youtube_video_id = s.youtube_video_id
+			WHERE t.youtube_video_id IS NULL;
+			",
+		)
+		.fetch_all(&mut *tx)
+		.await?
+		.into_iter()
+		.map(|row| row.get::<String, _>(0));
 
 		for key in removed_track_ids {
 			tracks.insert(key, TrackStatus::Removed);
@@ -225,6 +245,17 @@ impl Database {
 				position = excluded.position
 			", title, audio_path, thumbnail_path, position, youtube_video_id
 		).execute(&self.pool).await?;
+
+		Ok(())
+	}
+
+	pub async fn remove_track(&self, youtube_video_id: &str) -> Result<(), sqlx::Error> {
+		sqlx::query!(
+			"DELETE FROM tracks WHERE youtube_video_id = ?1",
+			youtube_video_id
+		)
+		.execute(&self.pool)
+		.await?;
 
 		Ok(())
 	}
