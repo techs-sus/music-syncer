@@ -10,5 +10,5 @@ CREATE TABLE IF NOT EXISTS tracks(
   audio_path text NOT NULL,
   thumbnail_path text,
 
-	position integer NOT NULL UNIQUE
+	position integer NOT NULL
 );
