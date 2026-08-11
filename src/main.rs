@@ -334,7 +334,7 @@ impl Playlist {
 			};
 
 			let track_identifier = format!(
-				"{} by {:?}",
+				"{} by {}",
 				track.name,
 				track
 					.artists
