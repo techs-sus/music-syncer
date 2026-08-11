@@ -12,15 +12,21 @@ use std::{
 use clap::{Parser, value_parser};
 use error::Error;
 use futures::StreamExt;
-use reader::Track;
 use reqwest::{
 	Client,
 	header::{CONTENT_TYPE, ORIGIN, RANGE, REFERER, USER_AGENT},
 };
-use server::ytmusic::YouTubeMusicClient;
+use rustypipe::{
+	client::RustyPipe,
+	model::{MusicPlaylist, TrackItem, traits::FileFormat},
+	param::StreamFilter,
+};
 use tracing::{info, warn};
 
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
+
+pub const MODERN_FIREFOX_USER_AGENT: &'static str =
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 // folder will be structured like so:
 // - audio
@@ -31,7 +37,7 @@ struct Playlist {
 	name: String,
 	folder: PathBuf,
 	database: Database,
-	client: YouTubeMusicClient,
+	client: RustyPipe,
 	reqwest_client: reqwest::Client,
 
 	concurrency_options: ConcurrencyOptions,
@@ -65,7 +71,7 @@ impl Playlist {
 		Ok(Self {
 			database: Database::open(path.as_ref(), &concurrency_options.pool).await?,
 			folder,
-			client: YouTubeMusicClient::new(),
+			client: RustyPipe::builder().storage_dir("/tmp").build()?,
 			reqwest_client: Client::new(),
 			name: path
 				.as_ref()
@@ -85,7 +91,6 @@ impl Playlist {
 		&self,
 		video_id: &str,
 		cover_url: Option<&str>,
-		user_agent: String,
 	) -> Result<Option<PathBuf>, Error> {
 		let Some(cover_url) = cover_url else {
 			return Ok(None);
@@ -94,7 +99,7 @@ impl Playlist {
 		let response = self
 			.reqwest_client
 			.get(cover_url)
-			.header(USER_AGENT, user_agent)
+			.header(USER_AGENT, MODERN_FIREFOX_USER_AGENT)
 			.header(REFERER, "https://music.youtube.com/")
 			.send()
 			.await?;
@@ -124,33 +129,41 @@ impl Playlist {
 		}
 	}
 
-	/// Downloads the track and gives back the audio_base_path with the proper extension and the user
-	/// agent used to download it. The audio path returned will always be an m4a file.
+	/// Downloads the track and gives back the audio_base_path with the proper extension.
+	/// The audio path returned will always be an m4a file.
 	#[tracing::instrument(skip(self))]
-	async fn download_single_track(&self, video_id: &str) -> Result<(PathBuf, String), Error> {
-		let stream_info = self
-			.client
-			.get_stream(video_id)
-			.await
-			.map_err(Error::UpstreamGettingStreamInfo)?;
+	async fn download_single_track(&self, video_id: &str) -> Result<PathBuf, Error> {
+		let player = self.client.query().player(video_id).await?;
+
+		let Some(stream) = player.select_audio_stream(&StreamFilter::default()) else {
+			return Err(Error::UpstreamGettingStreamInfo(
+				"failed selecting best audio stream".to_string(),
+			));
+		};
+
+		let Some(ref url) = stream.url else {
+			return Err(Error::UpstreamGettingStreamInfo(
+				"stream url was None".to_string(),
+			));
+		};
 
 		let audio_path = self
 			.folder
 			.join("audio")
 			.join(video_id)
-			.with_extension(stream_info.format.extension());
+			.with_extension(stream.format.extension());
 
 		let maybe_m4a_path = audio_path.with_extension("m4a");
 
 		// if the file was already downloaded as an m4a, don't refetch it
 		match tokio::fs::try_exists(&maybe_m4a_path).await {
-			Ok(true) => return Ok((maybe_m4a_path, stream_info.user_agent)),
+			Ok(true) => return Ok(maybe_m4a_path),
 
 			_ => {
 				let response = self
 					.reqwest_client
-					.get(&stream_info.url)
-					.header(USER_AGENT, &stream_info.user_agent)
+					.get(url)
+					.header(USER_AGENT, MODERN_FIREFOX_USER_AGENT)
 					.header(REFERER, "https://music.youtube.com/")
 					.header(ORIGIN, "https://music.youtube.com")
 					// this header is REQUIRED for near instant downloads
@@ -171,20 +184,21 @@ impl Playlist {
 
 		tokio::fs::remove_file(&audio_path).await?;
 
-		Ok((taggable_audio_path, stream_info.user_agent))
+		Ok(taggable_audio_path)
 	}
 
 	async fn sync_from_youtube_single_track(
 		&self,
 		playlist_ordered_position: i64,
-		track: &Track,
+		track: &TrackItem,
 		track_result: TrackStatus,
 	) -> Result<(), Error> {
 		// let playlist_ordered_position = playlist_ordered_position as i64;
-		let youtube_video_id = track.id.key();
+
+		let youtube_video_id = &track.id;
 
 		if let TrackStatus::Removed = track_result {
-			self.database.remove_track(&*youtube_video_id).await?;
+			self.database.remove_track(&youtube_video_id).await?;
 			return Ok(());
 		};
 
@@ -214,13 +228,13 @@ impl Playlist {
 
 		info!("downloading {youtube_video_id:?}");
 
-		let (resulting_audio_path, user_agent) = self.download_single_track(&youtube_video_id).await?;
+		// TODO: fetch thumbnail and audio in parallel
+		let resulting_audio_path = self.download_single_track(&youtube_video_id).await?;
 
 		let thumbnail_path = self
 			.download_thumbnail(
 				&youtube_video_id,
-				track.cover.as_ref().map(String::as_str),
-				user_agent,
+				track.cover.get(0).map(|cover| cover.url.as_str()),
 			)
 			.await
 			.unwrap_or(None);
@@ -235,14 +249,14 @@ impl Playlist {
 			self
 				.database
 				.insert_or_update_track(
-					&track.title,
+					&track.name,
 					&*resulting_audio_path.to_string_lossy(),
 					thumbnail_path
 						.as_ref()
 						.and_then(|maybe_path| maybe_path.as_ref().map(|path| path.to_string_lossy()))
 						.as_deref(),
 					playlist_ordered_position,
-					&*youtube_video_id,
+					&youtube_video_id,
 				)
 				.await?;
 		}
@@ -264,11 +278,11 @@ impl Playlist {
 			.await
 			.map_err(|_| Error::NoUpstreamPlaylist)?;
 
-		let tracks = self
-			.client
-			.get_playlist_entries(&playlist_id)
-			.await
-			.map_err(Error::UpstreamGettingPlaylistEntries)?;
+		let MusicPlaylist { mut tracks, .. } = self.client.query().music_playlist(playlist_id).await?;
+
+		tracks.extend_all(self.client.query()).await?;
+
+		let tracks = tracks.items;
 
 		let mut diff = self.database.diff_tracks(&tracks).await?;
 
@@ -277,7 +291,7 @@ impl Playlist {
 
 		for res in futures::stream::iter(tracks.iter().enumerate().map(
 			async |(playlist_ordered_position, track)| {
-				let result = diff.get(&*track.id.key()).unwrap().clone();
+				let result = diff.get(&track.id).unwrap().clone();
 
 				self
 					.sync_from_youtube_single_track(
@@ -287,7 +301,7 @@ impl Playlist {
 						result,
 					)
 					.await
-					.map_err(|e| (track.id.key(), e))
+					.map_err(|e| (&track.id, e))
 			},
 		))
 		.buffer_unordered(self.concurrency_options.worker_futures as usize)
@@ -301,7 +315,7 @@ impl Playlist {
 				Err((id, error)) => {
 					failures += 1;
 
-					let id = diff.remove_entry(&*id).unwrap().0;
+					let id = diff.remove_entry(id.as_str()).unwrap().0;
 					diff.insert(id, TrackStatus::Error(Rc::new(error)));
 				}
 			}
@@ -310,7 +324,7 @@ impl Playlist {
 		let tracks = tracks
 			.into_iter()
 			.enumerate()
-			.map(|(position, track)| (track.id.key().to_string(), (position as i64, track)))
+			.map(|(position, track)| (track.id.to_string(), (position as i64, track)))
 			.collect::<HashMap<_, _>>();
 
 		info!("Summary:");
@@ -319,11 +333,18 @@ impl Playlist {
 				continue;
 			};
 
-			let track_identifier = format!("{} by {}", track.title, track.artist);
+			let track_identifier = format!(
+				"{} by {:?}",
+				track.name,
+				track
+					.artists
+					.get(0)
+					.map(|artist| artist.name.as_str())
+					.unwrap_or("<None>")
+			);
 
 			match result {
 				TrackStatus::AlreadyExists(old_position) => {
-					// TODO: detect position changes
 					if *old_position != incoming_position {
 						info!("~@ pos {old_position} -> @pos {incoming_position}: {track_identifier}")
 					}

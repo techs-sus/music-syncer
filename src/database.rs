@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::Write, path::Path, rc::Rc};
 
 use crate::error::Error;
 use clap::value_parser;
-use reader::Track;
+use rustypipe::model::TrackItem;
 use sqlx::{
 	AssertSqlSafe, Row, SqlitePool,
 	sqlite::{SqliteConnectOptions, SqlitePoolOptions},
@@ -140,7 +140,7 @@ impl Database {
 	/// Returns a [`HashSet`] of the already existing tracks in the database.
 	pub async fn diff_tracks(
 		&self,
-		incoming_tracks: &[Track],
+		incoming_tracks: &[TrackItem],
 	) -> Result<HashMap<String, TrackStatus>, sqlx::Error> {
 		// acquire a connection from the pool
 		// must use a transaction because temp table is per connection not per database
@@ -159,11 +159,11 @@ impl Database {
 		for track in incoming_tracks {
 			// sqlx has an automatic prepare cache, so no need to prepare here
 			sqlx::query("INSERT OR IGNORE INTO incoming_tracks (youtube_video_id) VALUES (?1)")
-				.bind(track.id.key())
+				.bind(&track.id)
 				.execute(&mut *tx)
 				.await?;
 
-			tracks.insert(track.id.key().to_string(), TrackStatus::Added);
+			tracks.insert(track.id.clone(), TrackStatus::Added);
 		}
 
 		let already_existing_track_ids = sqlx::query(

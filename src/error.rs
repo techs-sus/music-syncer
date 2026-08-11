@@ -59,12 +59,12 @@ pub enum Error {
 	#[error("the playlist has no parent folder for its tracks and thumbnails")]
 	PlaylistHasNoParentFolder,
 
-	#[error("failed getting playlist entries from kopuz: {0}")]
-	UpstreamGettingPlaylistEntries(String),
-
-	#[error("failed getting a track's stream info from kopuz: {0}")]
+	#[error("failed getting a track's stream info: {0}")]
 	UpstreamGettingStreamInfo(String),
 
 	#[error("failed to remux a track's webm to its m4a counterpart with ffmpeg: {0}")]
 	FailedToRemuxAsM4a(std::io::Error),
+
+	#[error("rustypipe error: {0}")]
+	Rustypipe(#[from] rustypipe::error::Error),
 }

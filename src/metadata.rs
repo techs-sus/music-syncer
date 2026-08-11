@@ -2,7 +2,7 @@ use lofty::{
 	file::TaggedFileExt,
 	tag::{Accessor, TagExt},
 };
-use reader::Track;
+use rustypipe::model::TrackItem;
 use tracing::warn;
 
 use crate::error::{Error, LoftyError};
@@ -33,14 +33,16 @@ pub async fn ensure_audio_is_taggable<P: AsRef<Path>>(input_file: P) -> Result<P
 
 /// Embeds title, artist, album and optionally thumbnail metadata into the audio file at `audio_path`.
 pub fn tag<P: AsRef<Path>>(
-	track: &Track,
+	track: &TrackItem,
 	audio_path: P,
 	thumbnail_path: Option<P>,
 ) -> Result<(), Error> {
 	let audio_path = audio_path.as_ref();
 
-	let mut tagged_file =
-		lofty::probe::Probe::open(&audio_path).map_err(LoftyError::from)?.read().map_err(LoftyError::from)?;
+	let mut tagged_file = lofty::probe::Probe::open(&audio_path)
+		.map_err(LoftyError::from)?
+		.read()
+		.map_err(LoftyError::from)?;
 
 	let tag = match tagged_file.primary_tag_mut() {
 		Some(primary_tag) => primary_tag,
@@ -58,9 +60,13 @@ pub fn tag<P: AsRef<Path>>(
 		}
 	};
 
-	tag.set_title(track.title.clone());
-	tag.set_artist(track.artist.clone());
-	tag.set_album(track.album.clone());
+	tag.set_title(track.name.clone());
+	if let Some(artist) = track.artists.get(0).map(|artist| &artist.name) {
+		tag.set_artist(artist.clone());
+	}
+	if let Some(ref album_id) = track.album {
+		tag.set_album(album_id.name.clone());
+	}
 
 	if let Some(thumbnail_path) = thumbnail_path.as_ref() {
 		let mut cover = lofty::picture::Picture::from_reader(&mut BufReader::new(
@@ -73,7 +79,8 @@ pub fn tag<P: AsRef<Path>>(
 		tag.set_picture(0, cover);
 	}
 
-	tag.save_to_path(&audio_path, lofty::config::WriteOptions::default())
+	tag
+		.save_to_path(&audio_path, lofty::config::WriteOptions::default())
 		.map_err(LoftyError::from)?;
 
 	Ok(())
