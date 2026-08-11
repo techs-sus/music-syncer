@@ -6,6 +6,7 @@ use std::{
 	collections::HashMap,
 	io::BufWriter,
 	path::{Path, PathBuf},
+	rc::Rc,
 };
 
 use clap::{Parser, value_parser};
@@ -19,10 +20,7 @@ use reqwest::{
 use server::ytmusic::YouTubeMusicClient;
 use tracing::{info, warn};
 
-use crate::database::{Database, PoolConcurrencyOptions, TrackResult};
-
-/// https://sqlite.org/pragma.html#pragma_application_id
-pub const SQLITE_APPLICATION_ID: u32 = 0x7D8A4B83;
+use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
 // folder will be structured like so:
 // - audio
@@ -178,12 +176,12 @@ impl Playlist {
 		&self,
 		playlist_ordered_position: i64,
 		track: &Track,
-		track_result: TrackResult,
+		track_result: TrackStatus,
 	) -> Result<(), Error> {
 		// let playlist_ordered_position = playlist_ordered_position as i64;
 		let youtube_video_id = track.id.key();
 
-		if let TrackResult::AlreadyExists(..) = track_result
+		if let TrackStatus::AlreadyExists(..) = track_result
 			&& let Ok(true) = tokio::fs::try_exists(
 				self
 					.folder
@@ -265,21 +263,24 @@ impl Playlist {
 			.await
 			.map_err(Error::UpstreamGettingPlaylistEntries)?;
 
-		let diff = self.database.diff_tracks(&tracks).await?;
+		let mut diff = self.database.diff_tracks(&tracks).await?;
 
 		let mut successes: usize = 0;
 		let mut failures: usize = 0;
 
 		for res in futures::stream::iter(tracks.iter().enumerate().map(
-			|(playlist_ordered_position, track)| {
+			async |(playlist_ordered_position, track)| {
 				let result = diff.get(&*track.id.key()).unwrap().clone();
 
-				self.sync_from_youtube_single_track(
-					// usize -> i64 is usually non overflowing for music playlists
-					playlist_ordered_position as i64,
-					track,
-					result,
-				)
+				self
+					.sync_from_youtube_single_track(
+						// usize -> i64 is usually non overflowing for music playlists
+						playlist_ordered_position as i64,
+						track,
+						result,
+					)
+					.await
+					.map_err(|e| (track.id.key(), e))
 			},
 		))
 		.buffer_unordered(self.concurrency_options.worker_futures as usize)
@@ -290,9 +291,11 @@ impl Playlist {
 				Ok(..) => {
 					successes += 1;
 				}
-				Err(e) => {
+				Err((id, error)) => {
 					failures += 1;
-					tracing::error!("got error in join_all: {e:?}")
+
+					let id = diff.remove_entry(&*id).unwrap().0;
+					diff.insert(id, TrackStatus::Error(Rc::new(error)));
 				}
 			}
 		}
@@ -303,7 +306,7 @@ impl Playlist {
 			.map(|(position, track)| (track.id.key().to_string(), (position as i64, track)))
 			.collect::<HashMap<_, _>>();
 
-		info!("SUMMARY:");
+		info!("Summary:");
 		for (track_id, (incoming_position, track)) in tracks {
 			let Some(result) = diff.get(&track_id) else {
 				continue;
@@ -312,17 +315,20 @@ impl Playlist {
 			let track_identifier = format!("{} by {}", track.title, track.artist);
 
 			match result {
-				TrackResult::AlreadyExists(old_position) => {
+				TrackStatus::AlreadyExists(old_position) => {
 					// TODO: detect position changes
 					if *old_position != incoming_position {
-						info!("~@ pos {old_position} -> pos {incoming_position}: {track_identifier}")
+						info!("~@ pos {old_position} -> @pos {incoming_position}: {track_identifier}")
 					}
 				}
-				TrackResult::Added => {
-					info!("+@ pos {incoming_position}: {track_identifier}")
+				TrackStatus::Added => {
+					info!("+ @pos {incoming_position}: {track_identifier}")
 				}
-				TrackResult::Removed => {
-					info!("-@ pos {incoming_position}: {track_identifier}")
+				TrackStatus::Removed => {
+					info!("- @pos {incoming_position}: {track_identifier}")
+				}
+				TrackStatus::Error(error) => {
+					warn!("! @pos {incoming_position}: {track_identifier}: {error:?}")
 				}
 			}
 		}

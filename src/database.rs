@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, path::Path};
+use std::{collections::HashMap, io::Write, path::Path, rc::Rc};
 
 use crate::error::Error;
 use clap::value_parser;
@@ -26,15 +26,25 @@ pub struct Database {
 	pool: SqlitePool,
 }
 
-#[derive(PartialEq, Clone)]
-pub enum TrackResult {
-	/// tracks has it and db also does
-	AlreadyExists(i64),
-	/// neither tracks or db have it
+#[derive(Clone)]
+pub enum TrackStatus {
+	/// incoming tracks have it and db also does
+	AlreadyExists(/* position in database */ i64),
+	/// neither incoming tracks or db have it
 	Removed,
-	/// tracks has it but db does not
+	/// incoming tracks have it but db does not
 	Added,
+
+	/// the sync call failed, likely age restriction or unplayable
+	Error(Rc<Error>),
 }
+
+// pub fn track_id_as_str<'track>(track: &'track Track) -> &'track str {
+// 	match track.id {
+// 		TrackId::Local(..) => unreachable!("kopuz's local features are unused"),
+// 		TrackId::Server { ref item_id, .. } => item_id,
+// 	}
+// }
 
 impl Database {
 	pub async fn open<P: AsRef<Path>>(
@@ -130,7 +140,7 @@ impl Database {
 	pub async fn diff_tracks(
 		&self,
 		incoming_tracks: &[Track],
-	) -> Result<HashMap<String, TrackResult>, sqlx::Error> {
+	) -> Result<HashMap<String, TrackStatus>, sqlx::Error> {
 		// acquire a connection from the pool
 		// must use a transaction because temp table is per connection not per database
 		let mut tx = self.pool.begin().await?;
@@ -152,7 +162,7 @@ impl Database {
 				.execute(&mut *tx)
 				.await?;
 
-			tracks.insert(track.id.key().to_string(), TrackResult::Added);
+			tracks.insert(track.id.key().to_string(), TrackStatus::Added);
 		}
 
 		let already_existing_track_ids = sqlx::query(
@@ -180,11 +190,11 @@ impl Database {
 		.map(|row| row.get::<String, _>(0));
 
 		for (key, position) in already_existing_track_ids {
-			tracks.insert(key, TrackResult::AlreadyExists(position));
+			tracks.insert(key, TrackStatus::AlreadyExists(position));
 		}
 
 		for key in removed_track_ids {
-			tracks.insert(key, TrackResult::Removed);
+			tracks.insert(key, TrackStatus::Removed);
 		}
 
 		// clean temporary table to increase performance
