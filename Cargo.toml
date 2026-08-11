@@ -5,8 +5,6 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }
-# kopuz-server = { git = "https://github.com/techs-sus/kopuz" }
-# kopuz-reader = { git = "https://github.com/techs-sus/kopuz" }
 rustypipe = { git = "https://codeberg.org/ThetaDev/rustypipe.git", branch = "feat/deobf-extractor" }
 lofty = "0.25.0"
 mime2ext = "0.1.54"
