@@ -25,7 +25,7 @@ use tracing::{info, warn};
 
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
-pub const MODERN_FIREFOX_USER_AGENT: &'static str =
+pub const MODERN_FIREFOX_USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 
 // folder will be structured like so:
@@ -119,12 +119,11 @@ impl Playlist {
 					.folder
 					.join("thumbnail")
 					.join(video_id)
-					.with_extension(extension)
-					.to_path_buf();
+					.with_extension(extension);
 
 				tokio::fs::write(&final_path, response.bytes().await?).await?;
 
-				return Ok(Some(final_path));
+				Ok(Some(final_path))
 			}
 		}
 	}
@@ -173,10 +172,7 @@ impl Playlist {
 
 				let start = std::time::Instant::now();
 				tokio::fs::write(&audio_path, response.bytes().await?).await?;
-				info!(
-					"downloaded track in {:#?}",
-					std::time::Instant::now() - start
-				);
+				info!("downloaded track in {:#?}", start.elapsed());
 			}
 		};
 
@@ -198,7 +194,7 @@ impl Playlist {
 		let youtube_video_id = &track.id;
 
 		if let TrackStatus::Removed = track_result {
-			self.database.remove_track(&youtube_video_id).await?;
+			self.database.remove_track(youtube_video_id).await?;
 			return Ok(());
 		};
 
@@ -207,7 +203,7 @@ impl Playlist {
 				self
 					.folder
 					.join("audio")
-					.join(&*youtube_video_id)
+					.join(youtube_video_id)
 					.with_extension("m4a"),
 			)
 			.await
@@ -220,7 +216,7 @@ impl Playlist {
 
 			self
 				.database
-				.update_track_position(playlist_ordered_position, &youtube_video_id)
+				.update_track_position(playlist_ordered_position, youtube_video_id)
 				.await?;
 
 			return Ok(());
@@ -229,12 +225,12 @@ impl Playlist {
 		info!("downloading {youtube_video_id:?}");
 
 		// TODO: fetch thumbnail and audio in parallel
-		let resulting_audio_path = self.download_single_track(&youtube_video_id).await?;
+		let resulting_audio_path = self.download_single_track(youtube_video_id).await?;
 
 		let thumbnail_path = self
 			.download_thumbnail(
-				&youtube_video_id,
-				track.cover.get(0).map(|cover| cover.url.as_str()),
+				youtube_video_id,
+				track.cover.first().map(|cover| cover.url.as_str()),
 			)
 			.await
 			.unwrap_or(None);
@@ -250,13 +246,13 @@ impl Playlist {
 				.database
 				.insert_or_update_track(
 					&track.name,
-					&*resulting_audio_path.to_string_lossy(),
+					&resulting_audio_path.to_string_lossy(),
 					thumbnail_path
 						.as_ref()
 						.and_then(|maybe_path| maybe_path.as_ref().map(|path| path.to_string_lossy()))
 						.as_deref(),
 					playlist_ordered_position,
-					&youtube_video_id,
+					youtube_video_id,
 				)
 				.await?;
 		}
@@ -338,25 +334,24 @@ impl Playlist {
 				track.name,
 				track
 					.artists
-					.get(0)
-					.map(|artist| artist.name.as_str())
-					.unwrap_or("<None>")
+					.first()
+					.map_or("<None>", |artist| artist.name.as_str())
 			);
 
 			match result {
 				TrackStatus::AlreadyExists(old_position) => {
 					if *old_position != incoming_position {
-						info!("~@ pos {old_position} -> @pos {incoming_position}: {track_identifier}")
+						info!("~@ pos {old_position} -> @pos {incoming_position}: {track_identifier}");
 					}
 				}
 				TrackStatus::Added => {
-					info!("+ @pos {incoming_position}: {track_identifier}")
+					info!("+ @pos {incoming_position}: {track_identifier}");
 				}
 				TrackStatus::Removed => {
-					info!("- @pos {incoming_position}: {track_identifier}")
+					info!("- @pos {incoming_position}: {track_identifier}");
 				}
 				TrackStatus::Error(error) => {
-					warn!("! @pos {incoming_position}: {track_identifier}: {error:?}")
+					warn!("! @pos {incoming_position}: {track_identifier}: {error:?}");
 				}
 			}
 		}

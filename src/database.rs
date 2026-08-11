@@ -106,12 +106,12 @@ impl Database {
 			.fetch_all(&self.pool)
 			.await?;
 
-		write!(writer, "#EXTM3U\n")?;
+		writeln!(writer, "#EXTM3U")?;
 
-		for track in tracks.into_iter() {
-			write!(writer, "#EXTINF:0,{}\n", track.title)?;
+		for track in tracks {
+			writeln!(writer, "#EXTINF:0,{}", track.title)?;
 			// this should work because db should only store relative paths
-			write!(writer, "{}\n", track.audio_path)?;
+			writeln!(writer, "{}", track.audio_path)?;
 		}
 
 		writer.flush()?;

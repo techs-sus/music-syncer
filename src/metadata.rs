@@ -39,7 +39,7 @@ pub fn tag<P: AsRef<Path>>(
 ) -> Result<(), Error> {
 	let audio_path = audio_path.as_ref();
 
-	let mut tagged_file = lofty::probe::Probe::open(&audio_path)
+	let mut tagged_file = lofty::probe::Probe::open(audio_path)
 		.map_err(LoftyError::from)?
 		.read()
 		.map_err(LoftyError::from)?;
@@ -61,7 +61,7 @@ pub fn tag<P: AsRef<Path>>(
 	};
 
 	tag.set_title(track.name.clone());
-	if let Some(artist) = track.artists.get(0).map(|artist| &artist.name) {
+	if let Some(artist) = track.artists.first().map(|artist| &artist.name) {
 		tag.set_artist(artist.clone());
 	}
 	if let Some(ref album_id) = track.album {
@@ -80,7 +80,7 @@ pub fn tag<P: AsRef<Path>>(
 	}
 
 	tag
-		.save_to_path(&audio_path, lofty::config::WriteOptions::default())
+		.save_to_path(audio_path, lofty::config::WriteOptions::default())
 		.map_err(LoftyError::from)?;
 
 	Ok(())
