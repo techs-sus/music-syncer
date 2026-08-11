@@ -23,7 +23,7 @@
         craneLib = crane.mkLib pkgs;
 
         commonArgs = {
-          pname = "music-player";
+          pname = "music-syncer";
           version = "0.1.0";
 
           src = craneLib.cleanCargoSource ./.;
@@ -38,11 +38,7 @@
           ];
 
           buildInputs = with pkgs; [
-            # libxcb
-            # libxkbcommon
-            # wayland
-            # vulkan-loader
-            openssl
+            # openssl
             ffmpeg-headless
             libclang
           ];
@@ -50,18 +46,10 @@
 
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
 
-        ldLibraryPath = pkgs.lib.makeLibraryPath commonArgs.buildInputs;
-
         finalPackage = craneLib.buildPackage (
           commonArgs
           // {
             inherit cargoArtifacts;
-
-            postInstall = ''
-              for binary in $out/bin/*; do
-                wrapProgram "$binary" --prefix LD_LIBRARY_PATH : ${ldLibraryPath}
-              done
-            '';
 
             meta = {
               description = "lightweight music player";
@@ -75,7 +63,7 @@
                 }
               ];
               platforms = pkgs.lib.platforms.unix;
-              mainProgram = "music-player";
+              mainProgram = "music-syncer";
             };
           }
         );
@@ -100,10 +88,6 @@
           ];
 
           DATABASE_URL = "sqlite://dev.db";
-
-          shellHook = ''
-            export LD_LIBRARY_PATH="${ldLibraryPath}:$LD_LIBRARY_PATH"
-          '';
         };
 
         formatter = pkgs.nixfmt-tree;
