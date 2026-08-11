@@ -21,13 +21,27 @@
         pkgs = nixpkgs.legacyPackages.${system};
 
         craneLib = crane.mkLib pkgs;
+        inherit (pkgs) lib;
+
+        unfilteredRoot = ./.;
 
         commonArgs = {
           pname = "music-syncer";
           version = "0.1.0";
 
-          src = craneLib.cleanCargoSource ./.;
+          src = lib.fileset.toSource {
+            root = unfilteredRoot;
+            fileset = lib.fileset.unions [
+              (craneLib.fileset.commonCargoSources unfilteredRoot)
+              (lib.fileset.fileFilter (file: file.hasExt "md") unfilteredRoot)
+              ./.sqlx
+              ./migrations
+            ];
+          };
+
           strictDeps = true;
+
+          SQLX_OFFLINE = "true";
 
           buildFeatures = [ ];
 
