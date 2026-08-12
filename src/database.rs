@@ -15,11 +15,11 @@ pub const SQLITE_APPLICATION_ID: i32 = 0x7D8A4B83;
 pub struct PoolConcurrencyOptions {
 	/// How many database connections are guaranteed to exist at any time.
 	#[clap(long = "pool_min_connections", default_value_t = 8, value_parser = value_parser!(u32).range(1..))]
-	min_connections: u32,
+	pub min_connections: u32,
 
 	/// How many database connections may be reached if database load is high.
 	#[clap(long = "pool_max_connections", default_value_t = 16, value_parser = value_parser!(u32).range(1..))]
-	max_connections: u32,
+	pub max_connections: u32,
 }
 
 pub struct Database {

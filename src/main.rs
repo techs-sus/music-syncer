@@ -17,7 +17,7 @@ use reqwest::{
 	header::{CONTENT_TYPE, ORIGIN, RANGE, REFERER, USER_AGENT},
 };
 use rustypipe::{
-	client::RustyPipe,
+	client::{ClientType, RustyPipe},
 	model::{MusicPlaylist, TrackItem, traits::FileFormat},
 	param::StreamFilter,
 };
@@ -140,18 +140,26 @@ impl Playlist {
 	/// The audio path returned will always be an m4a file.
 	#[tracing::instrument(skip(self))]
 	async fn download_single_track(&self, video_id: &str) -> Result<PathBuf, Error> {
-		let player = self.client.query().player(video_id).await?;
+		let player = self
+			.client
+			.query()
+			.player_from_clients(
+				video_id,
+				&[
+					ClientType::DesktopMusic,
+					ClientType::Desktop,
+					ClientType::AndroidVr,
+					ClientType::Android,
+				],
+			)
+			.await?;
 
 		let Some(stream) = player.select_audio_stream(&StreamFilter::default()) else {
-			return Err(Error::UpstreamGettingStreamInfo(
-				"failed selecting best audio stream".to_string(),
-			));
+			return Err(Error::UpstreamGettingAudioStream);
 		};
 
 		let Some(ref url) = stream.url else {
-			return Err(Error::UpstreamGettingStreamInfo(
-				"stream url was None".to_string(),
-			));
+			return Err(Error::UpstreamGettingAudioStreamUrl);
 		};
 
 		let audio_path = self
@@ -492,4 +500,34 @@ async fn main() {
 			info!("successfully wrote playlist m3a");
 		}
 	};
+}
+
+#[doc(hidden)]
+#[cfg(test)]
+mod tests {
+	use crate::{Playlist, database::PoolConcurrencyOptions};
+
+	#[tokio::test]
+	async fn known_good_with_audio() {
+		tracing_subscriber::fmt().init();
+
+		let _ = tokio::fs::create_dir("/tmp/music-syncer-test").await;
+		let playlist = Playlist::from_path(
+			"/tmp/music-syncer-test/test.db",
+			crate::ConcurrencyOptions {
+				pool: PoolConcurrencyOptions {
+					min_connections: 1,
+					max_connections: 1,
+				},
+				worker_futures: 1,
+			},
+		)
+		.await
+		.expect("failed making playlist");
+
+		playlist
+			.download_single_track("lCKU-tI-upI")
+			.await
+			.expect("failed downloading track");
+	}
 }
