@@ -18,7 +18,7 @@ use reqwest::{
 };
 use rustypipe::{
 	client::{ClientType, RustyPipe},
-	model::{MusicPlaylist, TrackItem, traits::FileFormat},
+	model::{AudioFormat, MusicPlaylist, TrackItem, traits::FileFormat},
 	param::StreamFilter,
 };
 use tracing::{info, warn};
@@ -173,7 +173,14 @@ impl Playlist {
 			return Err(Error::UpstreamGettingAudioStreamUrl);
 		};
 
-		let audio_path = final_audio_path.with_extension(stream.format.extension());
+		let extension = match &stream.format {
+			AudioFormat::M4a => "m4a",
+			AudioFormat::Webm => "webm",
+
+			_ => unreachable!(),
+		};
+
+		let audio_path = final_audio_path.with_extension(extension);
 
 		let response = self
 			.reqwest_client
