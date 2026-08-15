@@ -18,7 +18,7 @@ use reqwest::{
 };
 use rustypipe::{
 	client::{ClientType, RustyPipe},
-	model::{AudioFormat, MusicPlaylist, TrackItem, traits::FileFormat},
+	model::{AudioFormat, MusicPlaylist, TrackItem},
 	param::StreamFilter,
 };
 use tracing::{info, warn};
