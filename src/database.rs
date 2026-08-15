@@ -101,7 +101,7 @@ impl Database {
 		Ok(Self { pool })
 	}
 
-	pub async fn write_m3a_playlist(&self, writer: &mut impl Write) -> Result<(), Error> {
+	pub async fn write_m3u_playlist(&self, writer: &mut impl Write) -> Result<(), Error> {
 		let tracks = sqlx::query!("SELECT audio_path, title FROM tracks ORDER BY position ASC")
 			.fetch_all(&self.pool)
 			.await?;

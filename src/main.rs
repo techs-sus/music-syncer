@@ -93,6 +93,10 @@ impl Playlist {
 		})
 	}
 
+	fn get_final_audio_path(&self, id: &str) -> PathBuf {
+		self.folder.join("audio").join(id).with_extension("m4a")
+	}
+
 	/// Downloads the track's thumbnail and gives back the path to the thumbnail with the proper
 	/// extension.
 	async fn download_thumbnail(
@@ -140,6 +144,13 @@ impl Playlist {
 	/// The audio path returned will always be an m4a file.
 	#[tracing::instrument(skip(self))]
 	async fn download_single_track(&self, video_id: &str) -> Result<PathBuf, Error> {
+		let final_audio_path = self.get_final_audio_path(video_id);
+
+		// if the file was already downloaded as an m4a, don't refetch it
+		if let Ok(true) = tokio::fs::try_exists(&final_audio_path).await {
+			return Ok(final_audio_path);
+		}
+
 		let player = self
 			.client
 			.query()
@@ -162,35 +173,22 @@ impl Playlist {
 			return Err(Error::UpstreamGettingAudioStreamUrl);
 		};
 
-		let audio_path = self
-			.folder
-			.join("audio")
-			.join(video_id)
-			.with_extension(stream.format.extension());
+		let audio_path = final_audio_path.with_extension(stream.format.extension());
 
-		let maybe_m4a_path = audio_path.with_extension("m4a");
+		let response = self
+			.reqwest_client
+			.get(url)
+			.header(USER_AGENT, MODERN_FIREFOX_USER_AGENT)
+			.header(REFERER, "https://music.youtube.com/")
+			.header(ORIGIN, "https://music.youtube.com")
+			// this header is REQUIRED for near instant downloads
+			.header(RANGE, "bytes=0-")
+			.send()
+			.await?;
 
-		// if the file was already downloaded as an m4a, don't refetch it
-		match tokio::fs::try_exists(&maybe_m4a_path).await {
-			Ok(true) => return Ok(maybe_m4a_path),
-
-			_ => {
-				let response = self
-					.reqwest_client
-					.get(url)
-					.header(USER_AGENT, MODERN_FIREFOX_USER_AGENT)
-					.header(REFERER, "https://music.youtube.com/")
-					.header(ORIGIN, "https://music.youtube.com")
-					// this header is REQUIRED for near instant downloads
-					.header(RANGE, "bytes=0-")
-					.send()
-					.await?;
-
-				let start = std::time::Instant::now();
-				tokio::fs::write(&audio_path, response.bytes().await?).await?;
-				info!("downloaded track in {:#?}", start.elapsed());
-			}
-		};
+		let start = std::time::Instant::now();
+		tokio::fs::write(&audio_path, response.bytes().await?).await?;
+		info!("downloaded track in {:#?}", start.elapsed());
 
 		let taggable_audio_path = metadata::ensure_audio_is_taggable(&audio_path).await?;
 
@@ -205,8 +203,6 @@ impl Playlist {
 		track: &TrackItem,
 		track_result: TrackStatus,
 	) -> Result<(), Error> {
-		// let playlist_ordered_position = playlist_ordered_position as i64;
-
 		let youtube_video_id = &track.id;
 
 		if let TrackStatus::Removed = track_result {
@@ -215,14 +211,7 @@ impl Playlist {
 		};
 
 		if let TrackStatus::AlreadyExists(..) = track_result
-			&& let Ok(true) = tokio::fs::try_exists(
-				self
-					.folder
-					.join("audio")
-					.join(youtube_video_id)
-					.with_extension("m4a"),
-			)
-			.await
+			&& let Ok(true) = tokio::fs::try_exists(self.get_final_audio_path(youtube_video_id)).await
 		{
 			// update track position as it has changed in the upstream
 			info!(
@@ -253,8 +242,8 @@ impl Playlist {
 
 		{
 			// all database paths must be relative for portability
-			let resulting_audio_path = pathdiff::diff_paths(&resulting_audio_path, &self.folder).unwrap();
-			let thumbnail_path = thumbnail_path
+			let relative_audio_path = pathdiff::diff_paths(&resulting_audio_path, &self.folder).unwrap();
+			let relative_thumbnail_path = thumbnail_path
 				.as_ref()
 				.map(|path| pathdiff::diff_paths(path, &self.folder));
 
@@ -262,8 +251,8 @@ impl Playlist {
 				.database
 				.insert_or_update_track(
 					&track.name,
-					&resulting_audio_path.to_string_lossy(),
-					thumbnail_path
+					&relative_audio_path.to_string_lossy(),
+					relative_thumbnail_path
 						.as_ref()
 						.and_then(|maybe_path| maybe_path.as_ref().map(|path| path.to_string_lossy()))
 						.as_deref(),
@@ -307,7 +296,7 @@ impl Playlist {
 
 				self
 					.sync_from_youtube_single_track(
-						// usize -> i64 is usually non overflowing for music playlists
+						// usize -> i64 is usually non overflowing on 64 bit platforms for music playlists
 						playlist_ordered_position as i64,
 						track,
 						result,
@@ -327,7 +316,7 @@ impl Playlist {
 				Err((id, error)) => {
 					failures += 1;
 
-					let id = diff.remove_entry(id.as_str()).unwrap().0;
+					let (id, _) = diff.remove_entry(id.as_str()).unwrap();
 					diff.insert(id, TrackStatus::Error(Rc::new(error)));
 				}
 			}
@@ -378,12 +367,12 @@ impl Playlist {
 		Ok(())
 	}
 
-	async fn write_playlist_to_m3a(&self) -> Result<(), Error> {
-		let mut buf = BufWriter::new(std::fs::File::create(
-			self.folder.join(&self.name).with_extension("m3a"),
+	async fn write_playlist_to_m3u(&self) -> Result<(), Error> {
+		let mut writer = BufWriter::new(std::fs::File::create(
+			self.folder.join(&self.name).with_extension("m3u"),
 		)?);
 
-		self.database.write_m3a_playlist(&mut buf).await?;
+		self.database.write_m3u_playlist(&mut writer).await?;
 
 		Ok(())
 	}
@@ -423,8 +412,8 @@ enum Command {
 		concurrency_options: ConcurrencyOptions,
 	},
 
-	/// Writes a playlist's m3a file.
-	WriteToM3a {
+	/// Writes a playlist's m3u file.
+	WriteToM3u {
 		#[clap(flatten)]
 		options: PlaylistOptions,
 		#[clap(flatten)]
@@ -460,7 +449,7 @@ async fn main() {
 			options,
 			concurrency_options,
 		}
-		| Command::WriteToM3a {
+		| Command::WriteToM3u {
 			options,
 			concurrency_options,
 		} => (options, concurrency_options),
@@ -492,12 +481,12 @@ async fn main() {
 				.expect("failed syncing from youtube");
 			info!("successfully synced from youtube");
 		}
-		Command::WriteToM3a { .. } => {
+		Command::WriteToM3u { .. } => {
 			playlist
-				.write_playlist_to_m3a()
+				.write_playlist_to_m3u()
 				.await
-				.expect("failed writing playlist to m3a");
-			info!("successfully wrote playlist m3a");
+				.expect("failed writing playlist to m3u");
+			info!("successfully wrote playlist m3u");
 		}
 	};
 }
