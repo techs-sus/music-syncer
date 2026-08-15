@@ -25,8 +25,9 @@ use tracing::{info, warn};
 
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
+/// Latest ESR release of Firefox. Pulled from <https://www.whatismybrowser.com/guides/the-latest-user-agent/firefox>.
 pub const MODERN_FIREFOX_USER_AGENT: &str =
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0";
 
 // folder will be structured like so:
 // - audio
