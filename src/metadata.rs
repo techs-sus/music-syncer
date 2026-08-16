@@ -15,18 +15,36 @@ use std::{
 /// the result. Note that the original path given is not deleted by this function, and it is up to
 /// the caller to clean up the original path given.
 ///
+/// Files that are already m4a are returned as-is, as remuxing them in place is not possible with
+/// ffmpeg and not required to tag them.
+///
+/// Input files that are not m4a are deleted as they waste storage space and cannot be tagged.
+///
 /// This function has a quite high performance penalty, as reencoding with ffmpeg is quite slow.
 pub async fn ensure_audio_is_taggable<P: AsRef<Path>>(input_file: P) -> Result<PathBuf, Error> {
 	let input_file = input_file.as_ref();
 	let output_file = input_file.with_extension("m4a");
 
+	// see the documentation comment
+	if input_file.extension().is_some_and(|ext| ext == "m4a") {
+		return Ok(output_file);
+	}
+
 	// linking against and using the ffmpeg-next api bloats the build
-	tokio::process::Command::new("ffmpeg")
+	let output = tokio::process::Command::new("ffmpeg")
 		.args(["-y", "-i"])
 		.args([input_file, &output_file])
 		.output()
 		.await
 		.map_err(Error::FailedToRemuxAsM4a)?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
+		return Err(Error::FailedToRemuxAsM4a(std::io::Error::other(stderr)));
+	}
+
+	// remove old file as it is not a taggable m4a
+	tokio::fs::remove_file(input_file).await?;
 
 	Ok(output_file)
 }

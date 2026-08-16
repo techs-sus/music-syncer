@@ -65,8 +65,14 @@ pub enum Error {
 	#[error("failed getting a track's audio stream's url")]
 	UpstreamGettingAudioStreamUrl,
 
-	#[error("failed to remux a track's webm to its m4a counterpart with ffmpeg: {0}")]
+	#[error("failed to remux a track to its m4a counterpart with ffmpeg: {0}")]
 	FailedToRemuxAsM4a(std::io::Error),
+
+	#[error("failed fetching audio stream for {video_id}: unexpected HTTP status {status}")]
+	UpstreamAudioFetchFailed {
+		video_id: String,
+		status: reqwest::StatusCode,
+	},
 
 	#[error("rustypipe error: {0}")]
 	Rustypipe(#[from] rustypipe::error::Error),

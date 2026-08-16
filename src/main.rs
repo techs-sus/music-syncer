@@ -191,13 +191,19 @@ impl Playlist {
 			.send()
 			.await?;
 
+		let status = response.status();
+		if !status.is_success() {
+			return Err(Error::UpstreamAudioFetchFailed {
+				video_id: video_id.to_string(),
+				status,
+			});
+		}
+
 		let start = std::time::Instant::now();
 		tokio::fs::write(&audio_path, response.bytes().await?).await?;
 		info!("downloaded track in {:#?}", start.elapsed());
 
 		let taggable_audio_path = metadata::ensure_audio_is_taggable(&audio_path).await?;
-
-		tokio::fs::remove_file(&audio_path).await?;
 
 		Ok(taggable_audio_path)
 	}
@@ -505,6 +511,7 @@ mod tests {
 	async fn known_good_with_audio() {
 		tracing_subscriber::fmt().init();
 
+		let _ = tokio::fs::remove_dir_all("/tmp/music-syncer-test").await;
 		let _ = tokio::fs::create_dir("/tmp/music-syncer-test").await;
 		let playlist = Playlist::from_path(
 			"/tmp/music-syncer-test/test.db",
@@ -519,9 +526,19 @@ mod tests {
 		.await
 		.expect("failed making playlist");
 
-		playlist
-			.download_single_track("lCKU-tI-upI")
+		let audio_path = playlist
+			.download_single_track("-2OpiWEdBYI")
 			.await
 			.expect("failed downloading track");
+
+		let file_size = tokio::fs::metadata(&audio_path)
+			.await
+			.expect("failed reading downloaded track metadata")
+			.len();
+
+		assert!(
+			file_size > 1024,
+			"downloaded track is implausibly small: {file_size} bytes at {audio_path:?}"
+		);
 	}
 }
