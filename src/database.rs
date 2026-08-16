@@ -8,7 +8,7 @@ use sqlx::{
 	sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 
-/// https://sqlite.org/pragma.html#pragma_application_id
+/// See <https://sqlite.org/pragma.html#pragma_application_id>.
 pub const SQLITE_APPLICATION_ID: i32 = 0x7D8A4B83;
 
 #[derive(clap::Args, Clone)]

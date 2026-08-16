@@ -26,6 +26,7 @@ use tracing::{info, warn};
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
 /// Latest ESR release of Firefox. Pulled from <https://www.whatismybrowser.com/guides/the-latest-user-agent/firefox>.
+///
 /// Currently only used for fetching thumbnails as tracks are fecthed with a user agent matching
 /// their client_type.
 pub const MODERN_FIREFOX_USER_AGENT: &str =
