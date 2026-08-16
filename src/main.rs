@@ -26,6 +26,8 @@ use tracing::{info, warn};
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
 /// Latest ESR release of Firefox. Pulled from <https://www.whatismybrowser.com/guides/the-latest-user-agent/firefox>.
+/// Currently only used for fetching thumbnails as tracks are fecthed with a user agent matching
+/// their client_type.
 pub const MODERN_FIREFOX_USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0";
 
@@ -155,15 +157,7 @@ impl Playlist {
 		let player = self
 			.client
 			.query()
-			.player_from_clients(
-				video_id,
-				&[
-					ClientType::DesktopMusic,
-					ClientType::Desktop,
-					ClientType::AndroidVr,
-					ClientType::Android,
-				],
-			)
+			.player_from_clients(video_id, &[ClientType::AndroidVr])
 			.await?;
 
 		let Some(stream) = player.select_audio_stream(&StreamFilter::default()) else {
@@ -186,7 +180,10 @@ impl Playlist {
 		let response = self
 			.reqwest_client
 			.get(url)
-			.header(USER_AGENT, MODERN_FIREFOX_USER_AGENT)
+			.header(
+				USER_AGENT,
+				&*self.client.query().user_agent(player.client_type),
+			)
 			.header(REFERER, "https://music.youtube.com/")
 			.header(ORIGIN, "https://music.youtube.com")
 			// this header is REQUIRED for near instant downloads
