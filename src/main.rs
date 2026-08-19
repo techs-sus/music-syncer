@@ -106,15 +106,7 @@ impl Playlist {
 	/// Downloads the track's thumbnail and gives back the path to the thumbnail with the proper
 	/// extension.
 	#[tracing::instrument(skip(self))]
-	async fn download_thumbnail(
-		&self,
-		video_id: &str,
-		cover_url: Option<&str>,
-	) -> Result<Option<PathBuf>, Error> {
-		let Some(cover_url) = cover_url else {
-			return Ok(None);
-		};
-
+	async fn download_thumbnail(&self, video_id: &str, cover_url: &str) -> Result<PathBuf, Error> {
 		let response = self
 			.reqwest_client
 			.get(cover_url)
@@ -123,26 +115,34 @@ impl Playlist {
 			.send()
 			.await?;
 
+		let base_path = self.folder.join("thumbnail").join(video_id);
+
+		let already_exists = tokio::select! {
+			Ok(true) = tokio::fs::try_exists(base_path.with_extension("png")) => Some("png"),
+			Ok(true) = tokio::fs::try_exists(base_path.with_extension("jpg")) => Some("jpg"),
+			Ok(true) = tokio::fs::try_exists(base_path.with_extension("jpeg")) => Some("jpeg"),
+
+			else => None,
+		};
+
+		if let Some(extension) = already_exists {
+			return Ok(base_path.with_extension(extension));
+		}
+
 		match response
 			.headers()
 			.get(CONTENT_TYPE)
 			.map(|value| value.to_str())
 		{
-			None | Some(Err(..)) => Ok(None),
+			None | Some(Err(..)) => Err(Error::FailedGettingContentTypeHeader),
 			Some(Ok(content_type)) => {
-				let Some(extension) = mime2ext::mime2ext(content_type) else {
-					return Ok(None);
-				};
+				let extension = mime2ext::mime2ext(content_type).ok_or(Error::FailedToExtractMimeType)?;
 
-				let final_path = self
-					.folder
-					.join("thumbnail")
-					.join(video_id)
-					.with_extension(extension);
+				let final_path = base_path.with_extension(extension);
 
 				tokio::fs::write(&final_path, response.bytes().await?).await?;
 
-				Ok(Some(final_path))
+				Ok(final_path)
 			}
 		}
 	}
@@ -226,6 +226,14 @@ impl Playlist {
 			return Ok(());
 		};
 
+		let cover_url = track.cover.first().map(|cover| cover.url.as_str());
+
+		let thumbnail_path = if let Some(cover_url) = cover_url {
+			Some(self.download_thumbnail(youtube_video_id, cover_url).await?)
+		} else {
+			None
+		};
+
 		if let TrackStatus::AlreadyExists(..) = track_result
 			&& let Ok(true) = tokio::fs::try_exists(self.get_final_audio_path(youtube_video_id)).await
 		{
@@ -245,16 +253,7 @@ impl Playlist {
 
 		trace!("downloading {youtube_video_id:?}");
 
-		// TODO: fetch thumbnail and audio in parallel
 		let resulting_audio_path = self.download_single_track(youtube_video_id).await?;
-
-		let thumbnail_path = self
-			.download_thumbnail(
-				youtube_video_id,
-				track.cover.first().map(|cover| cover.url.as_str()),
-			)
-			.await
-			.unwrap_or(None);
 
 		{
 			// all database paths must be relative for portability
@@ -534,15 +533,15 @@ async fn main() {
 #[doc(hidden)]
 #[cfg(test)]
 mod tests {
+	use rustypipe::model::MusicPlaylist;
+
 	use crate::{Playlist, database::PoolConcurrencyOptions};
 
-	#[tokio::test]
-	async fn known_good_with_audio() {
-		tracing_subscriber::fmt().init();
-
+	async fn open_test_playlist() -> Playlist {
 		let _ = tokio::fs::remove_dir_all("/tmp/music-syncer-test").await;
 		let _ = tokio::fs::create_dir("/tmp/music-syncer-test").await;
-		let playlist = Playlist::from_path(
+
+		Playlist::from_path(
 			"/tmp/music-syncer-test/test.db",
 			crate::ConcurrencyOptions {
 				pool: PoolConcurrencyOptions {
@@ -553,7 +552,14 @@ mod tests {
 			},
 		)
 		.await
-		.expect("failed making playlist");
+		.expect("failed making playlist")
+	}
+
+	#[tokio::test]
+	async fn known_good_audio() {
+		let _ = tracing_subscriber::fmt().try_init();
+
+		let playlist = open_test_playlist().await;
 
 		let audio_path = playlist
 			.download_single_track("-2OpiWEdBYI")
@@ -568,6 +574,47 @@ mod tests {
 		assert!(
 			file_size > 1024,
 			"downloaded track is implausibly small: {file_size} bytes at {audio_path:?}"
+		);
+	}
+
+	#[tokio::test]
+	async fn known_good_thumbnail() {
+		let _ = tracing_subscriber::fmt().try_init();
+
+		let playlist = open_test_playlist().await;
+
+		let MusicPlaylist { mut tracks, .. } = playlist
+			.client
+			.query()
+			.music_playlist("OLAK5uy_nFiS1SeXBnJII-kBfpg7kGRB0JeE_tot8")
+			.await
+			.expect("failed fetching playlist");
+
+		tracks
+			.extend_all(playlist.client.query())
+			.await
+			.expect("failed extending pages");
+
+		let tracks = tracks.items;
+
+		let first_track = tracks.first().expect("no first track");
+
+		let thumbnail_path = playlist
+			.download_thumbnail(
+				&first_track.id,
+				&first_track.cover.first().expect("no first cover").url,
+			)
+			.await
+			.expect("failed downloading thumbnail");
+
+		let file_size = tokio::fs::metadata(&thumbnail_path)
+			.await
+			.expect("failed reading downloaded thumbnail metadata")
+			.len();
+
+		assert!(
+			file_size > 512,
+			"downloaded track is implausibly small: {file_size} bytes at {thumbnail_path:?}"
 		);
 	}
 }

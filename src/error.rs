@@ -76,4 +76,10 @@ pub enum Error {
 
 	#[error("rustypipe error: {0}")]
 	Rustypipe(#[from] rustypipe::error::Error),
+
+	#[error("failed getting the file extension from the content-type header")]
+	FailedToExtractMimeType,
+
+	#[error("failed getting the content-type header")]
+	FailedGettingContentTypeHeader,
 }
