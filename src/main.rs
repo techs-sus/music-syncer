@@ -34,6 +34,20 @@ use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 pub const MODERN_FIREFOX_USER_AGENT: &str =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0";
 
+/// Formats a track as `<track name> by <artists>`
+fn format_track(track: &TrackItem) -> String {
+	format!(
+		"{} by {}",
+		track.name,
+		track
+			.artists
+			.iter()
+			.map(|artist| artist.name.as_str())
+			.collect::<Vec<_>>()
+			.join(", ")
+	)
+}
+
 // folder will be structured like so:
 // - audio
 // - thumbnail
@@ -212,7 +226,7 @@ impl Playlist {
 		Ok(taggable_audio_path)
 	}
 
-	#[tracing::instrument(skip_all, fields(track.name = %track.name, track.artists = %track.artists.iter().map(|id| id.name.as_str()).collect::<Vec<_>>().join(", ")))]
+	#[tracing::instrument(skip_all, fields(track.identifier = format_track(track)))]
 	async fn sync_from_youtube_single_track(
 		&self,
 		playlist_ordered_position: i64,
@@ -365,14 +379,7 @@ impl Playlist {
 				continue;
 			};
 
-			let track_identifier = format!(
-				"{} by {}",
-				track.name,
-				track
-					.artists
-					.first()
-					.map_or("<None>", |artist| artist.name.as_str())
-			);
+			let track_identifier = format_track(&track);
 
 			match result {
 				TrackStatus::AlreadyExists(old_position) => {
