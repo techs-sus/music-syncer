@@ -21,7 +21,9 @@ use rustypipe::{
 	model::{AudioFormat, MusicPlaylist, TrackItem},
 	param::StreamFilter,
 };
-use tracing::{info, warn};
+use tracing::{Span, info, level_filters::LevelFilter, trace, warn};
+use tracing_indicatif::{IndicatifLayer, span_ext::IndicatifSpanExt, style::ProgressStyle};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::database::{Database, PoolConcurrencyOptions, TrackStatus};
 
@@ -103,6 +105,7 @@ impl Playlist {
 
 	/// Downloads the track's thumbnail and gives back the path to the thumbnail with the proper
 	/// extension.
+	#[tracing::instrument(skip(self))]
 	async fn download_thumbnail(
 		&self,
 		video_id: &str,
@@ -202,13 +205,14 @@ impl Playlist {
 
 		let start = std::time::Instant::now();
 		tokio::fs::write(&audio_path, response.bytes().await?).await?;
-		info!("downloaded track in {:#?}", start.elapsed());
+		trace!("downloaded track in {:#?}", start.elapsed());
 
 		let taggable_audio_path = metadata::ensure_audio_is_taggable(&audio_path).await?;
 
 		Ok(taggable_audio_path)
 	}
 
+	#[tracing::instrument(skip_all, fields(track.name = %track.name, track.artists = %track.artists.iter().map(|id| id.name.as_str()).collect::<Vec<_>>().join(", ")))]
 	async fn sync_from_youtube_single_track(
 		&self,
 		playlist_ordered_position: i64,
@@ -226,7 +230,7 @@ impl Playlist {
 			&& let Ok(true) = tokio::fs::try_exists(self.get_final_audio_path(youtube_video_id)).await
 		{
 			// update track position as it has changed in the upstream
-			info!(
+			trace!(
 				"track id {} already exists, not fetching from youtube, updating track position",
 				&youtube_video_id
 			);
@@ -239,7 +243,7 @@ impl Playlist {
 			return Ok(());
 		}
 
-		info!("downloading {youtube_video_id:?}");
+		trace!("downloading {youtube_video_id:?}");
 
 		// TODO: fetch thumbnail and audio in parallel
 		let resulting_audio_path = self.download_single_track(youtube_video_id).await?;
@@ -302,11 +306,20 @@ impl Playlist {
 		let mut successes: usize = 0;
 		let mut failures: usize = 0;
 
+		let header_span = tracing::info_span!("header");
+		header_span
+			.pb_set_style(&ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}").unwrap());
+		header_span.pb_set_length(tracks.len() as u64);
+		header_span.pb_set_message("Processing tracks");
+		header_span.pb_set_finish_message("All tracks processed");
+
+		let header_span_enter = header_span.enter();
+
 		for res in futures::stream::iter(tracks.iter().enumerate().map(
 			async |(playlist_ordered_position, track)| {
 				let result = diff.get(&track.id).unwrap().clone();
 
-				self
+				let res = self
 					.sync_from_youtube_single_track(
 						// usize -> i64 is usually non overflowing on 64 bit platforms for music playlists
 						playlist_ordered_position as i64,
@@ -314,7 +327,11 @@ impl Playlist {
 						result,
 					)
 					.await
-					.map_err(|e| (&track.id, e))
+					.map_err(|e| (&track.id, e));
+
+				Span::current().pb_inc(1);
+
+				res
 			},
 		))
 		.buffer_unordered(self.concurrency_options.worker_futures as usize)
@@ -333,6 +350,9 @@ impl Playlist {
 				}
 			}
 		}
+
+		drop(header_span_enter);
+		drop(header_span);
 
 		let tracks = tracks
 			.into_iter()
@@ -442,11 +462,19 @@ struct Args {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
-	tracing_subscriber::fmt()
-		.compact()
-		.with_target(false)
-		.without_time()
-		.with_level(true)
+	let indicatif_layer = IndicatifLayer::new();
+
+	tracing_subscriber::registry()
+		.with(LevelFilter::INFO)
+		.with(
+			tracing_subscriber::fmt::layer()
+				.with_writer(indicatif_layer.get_stderr_writer())
+				.compact()
+				.with_target(false)
+				.without_time()
+				.with_level(true),
+		)
+		.with(indicatif_layer)
 		.init();
 
 	let args = Args::parse();
