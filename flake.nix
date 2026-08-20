@@ -45,21 +45,40 @@
             .${system};
         };
 
+        botguardSrc = builtins.fetchGit {
+          url = "https://codeberg.org/ThetaDev/rustypipe-botguard.git";
+          rev = "f235ebc1ae89d0fa2c103ca705ff1a312b9be673";
+          narHash = "sha256-5FtH5yfi9HSPQ7lnCu4KzQrIdBLLp1VvkuGgYrZt8Yw=";
+        };
+
+        botguardVendoredDeps = craneLib.vendorCargoDeps { src = botguardSrc; };
+
+        # deno_core >= 0.400 no longer embeds its extension JS files into the binary, so revert that
+        botguardVendoredDepsEmbedded = pkgs.runCommand "botguard-vendor-cargo-deps-embedded" { } ''
+          cp -rL ${botguardVendoredDeps}/. $out/
+          chmod -R u+w $out
+
+          substituteInPlace "$out"/*/deno_core-0.403.0/extensions.rs \
+            --replace-fail '__extension_include_js_files_inner!(mode=loaded, name=$name' '__extension_include_js_files_inner!(mode=included, name=$name' \
+            --replace-fail '__extension_include_js_files_inner!(mode=loaded, $($rest)*)' '__extension_include_js_files_inner!(mode=included, $($rest)*)'
+
+          substituteInPlace "$out/config.toml" \
+            --replace-fail ${botguardVendoredDeps} $out
+        '';
+
         rustypipe-botguard = craneLib.buildPackage {
           pname = "rustypipe-botguard";
           version = "0.1.2";
 
-          src = builtins.fetchGit {
-            url = "https://codeberg.org/ThetaDev/rustypipe-botguard.git";
-            rev = "f235ebc1ae89d0fa2c103ca705ff1a312b9be673";
-            narHash = "sha256-5FtH5yfi9HSPQ7lnCu4KzQrIdBLLp1VvkuGgYrZt8Yw=";
-          };
+          src = botguardSrc;
 
           strictDeps = true;
 
           RUSTY_V8_ARCHIVE = rustyV8;
 
           buildFeatures = [ ];
+
+          cargoVendorDir = botguardVendoredDepsEmbedded;
 
           nativeBuildInputs = with pkgs; [
             pkg-config
