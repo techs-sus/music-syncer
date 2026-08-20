@@ -18,7 +18,7 @@ use reqwest::{
 };
 use rustypipe::{
 	client::{ClientType, RustyPipe},
-	model::{AudioFormat, MusicPlaylist, TrackItem},
+	model::{AudioFormat, MusicPlaylist, Thumbnail, TrackItem},
 	param::StreamFilter,
 };
 use tracing::{Span, info, level_filters::LevelFilter, trace, warn};
@@ -79,9 +79,11 @@ impl Playlist {
 		path: P,
 		concurrency_options: ConcurrencyOptions,
 	) -> Result<Self, Error> {
-		let Some(folder) = path.as_ref().parent().map(Path::to_path_buf) else {
-			return Err(Error::PlaylistHasNoParentFolder);
-		};
+		let folder = path
+			.as_ref()
+			.parent()
+			.map(Path::to_path_buf)
+			.ok_or(Error::PlaylistHasNoParentFolder)?;
 
 		let mut client_builder = RustyPipe::builder();
 
@@ -151,7 +153,6 @@ impl Playlist {
 			None | Some(Err(..)) => Err(Error::FailedGettingContentTypeHeader),
 			Some(Ok(content_type)) => {
 				let extension = mime2ext::mime2ext(content_type).ok_or(Error::FailedToExtractMimeType)?;
-
 				let final_path = base_path.with_extension(extension);
 
 				tokio::fs::write(&final_path, response.bytes().await?).await?;
@@ -178,13 +179,14 @@ impl Playlist {
 			.player_from_clients(video_id, &[ClientType::AndroidVr])
 			.await?;
 
-		let Some(stream) = player.select_audio_stream(&StreamFilter::default()) else {
-			return Err(Error::UpstreamGettingAudioStream);
-		};
+		let stream = player
+			.select_audio_stream(&StreamFilter::default())
+			.ok_or(Error::UpstreamGettingAudioStream)?;
 
-		let Some(ref url) = stream.url else {
-			return Err(Error::UpstreamGettingAudioStreamUrl);
-		};
+		let url = stream
+			.url
+			.as_ref()
+			.ok_or(Error::UpstreamGettingAudioStreamUrl)?;
 
 		let extension = match &stream.format {
 			AudioFormat::M4a => "m4a",
@@ -193,7 +195,7 @@ impl Playlist {
 			_ => unreachable!(),
 		};
 
-		let audio_path = final_audio_path.with_extension(extension);
+		let temporary_audio_path = final_audio_path.with_extension(extension);
 
 		let response = self
 			.reqwest_client
@@ -218,10 +220,10 @@ impl Playlist {
 		}
 
 		let start = std::time::Instant::now();
-		tokio::fs::write(&audio_path, response.bytes().await?).await?;
+		tokio::fs::write(&temporary_audio_path, response.bytes().await?).await?;
 		trace!("downloaded track in {:#?}", start.elapsed());
 
-		let taggable_audio_path = metadata::ensure_audio_is_taggable(&audio_path).await?;
+		let taggable_audio_path = metadata::ensure_audio_is_taggable(&temporary_audio_path).await?;
 
 		Ok(taggable_audio_path)
 	}
@@ -233,6 +235,11 @@ impl Playlist {
 		track: &TrackItem,
 		track_result: TrackStatus,
 	) -> Result<(), Error> {
+		// picks the thumbnail with the highest area
+		fn pick_best_thumbnail(thumbnails: &[Thumbnail]) -> Option<&Thumbnail> {
+			thumbnails.iter().max_by_key(|t| t.width * t.height)
+		}
+
 		let youtube_video_id = &track.id;
 
 		if let TrackStatus::Removed = track_result {
@@ -240,12 +247,13 @@ impl Playlist {
 			return Ok(());
 		};
 
-		let cover_url = track.cover.first().map(|cover| cover.url.as_str());
-
-		let thumbnail_path = if let Some(cover_url) = cover_url {
-			Some(self.download_thumbnail(youtube_video_id, cover_url).await?)
-		} else {
-			None
+		let thumbnail_path = match pick_best_thumbnail(&track.cover) {
+			Some(cover) => Some(
+				self
+					.download_thumbnail(youtube_video_id, &cover.url)
+					.await?,
+			),
+			_ => None,
 		};
 
 		if let TrackStatus::AlreadyExists(..) = track_result
@@ -330,21 +338,22 @@ impl Playlist {
 
 		for res in futures::stream::iter(tracks.iter().enumerate().map(
 			async |(playlist_ordered_position, track)| {
-				let result = diff.get(&track.id).unwrap().clone();
+				let track_result = diff.get(&track.id).unwrap().clone();
 
-				let res = self
+				let result = self
 					.sync_from_youtube_single_track(
 						// usize -> i64 is usually non overflowing on 64 bit platforms for music playlists
 						playlist_ordered_position as i64,
 						track,
-						result,
+						track_result,
 					)
 					.await
 					.map_err(|e| (&track.id, e));
 
+				// increase the progress bar (see header_span)
 				Span::current().pb_inc(1);
 
-				res
+				result
 			},
 		))
 		.buffer_unordered(self.concurrency_options.worker_futures as usize)
@@ -364,6 +373,7 @@ impl Playlist {
 			}
 		}
 
+		// exit the span by dropping it
 		drop(header_span_enter);
 		drop(header_span);
 
@@ -541,6 +551,7 @@ async fn main() {
 #[cfg(test)]
 mod tests {
 	use rustypipe::model::MusicPlaylist;
+	use tracing::info;
 
 	use crate::{Playlist, database::PoolConcurrencyOptions};
 
@@ -605,6 +616,8 @@ mod tests {
 		let tracks = tracks.items;
 
 		let first_track = tracks.first().expect("no first track");
+
+		info!("covers: {:?}", first_track.cover);
 
 		let thumbnail_path = playlist
 			.download_thumbnail(
