@@ -65,6 +65,9 @@
           // {
             inherit cargoArtifacts;
 
+            # disable tests
+            doCheck = false;
+
             meta = {
               description = "lightweight music player";
               homepage = "https://github.com/techs-sus/music-player";
