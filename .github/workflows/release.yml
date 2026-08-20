@@ -1,18 +1,14 @@
 name: Build and release
-
 on:
   push:
     tags:
       - "v*"
-
 permissions:
   contents: write
-
 jobs:
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         include:
@@ -20,24 +16,19 @@ jobs:
             os: ubuntu-latest
             binary: music-syncer
             archive: music-syncer-linux-x86_64.tar.gz
-
           - name: macos-arm64
             os: macos-latest
             binary: music-syncer
             archive: music-syncer-macos-arm64.tar.gz
-
           - name: windows-x86_64
             os: windows-latest
             binary: music-syncer.exe
             archive: music-syncer-windows-x86_64.zip
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
@@ -48,10 +39,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
-
       - name: Build
         run: cargo build --release --locked
-
       - name: Package Unix binary
         if: runner.os != 'Windows'
         shell: bash
@@ -62,7 +51,6 @@ jobs:
           mkdir -p dist
           cp "target/release/$BINARY" "dist/$BINARY"
           tar -C dist -czf "dist/$ARCHIVE" "$BINARY"
-
       - name: Package Windows binary
         if: runner.os == 'Windows'
         shell: pwsh
@@ -75,25 +63,23 @@ jobs:
           Compress-Archive `
             -Path "dist/$env:BINARY" `
             -DestinationPath "dist/$env:ARCHIVE"
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: dist/*
-
   release:
     name: Create GitHub release
     needs: build
     runs-on: ubuntu-latest
-
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -104,4 +90,3 @@ jobs:
             dist/*.zip \
             --title "Build $VERSION" \
             --generate-notes
-
