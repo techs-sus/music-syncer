@@ -102,7 +102,11 @@ impl Playlist {
 			database: Database::open(path.as_ref(), &concurrency_options.pool).await?,
 			folder,
 			client,
-			reqwest_client: Client::new(),
+			reqwest_client: Client::builder()
+				.gzip(true)
+				.brotli(true)
+				.build()
+				.expect("failed building reqwest client"),
 			name: path
 				.as_ref()
 				.with_extension("")
