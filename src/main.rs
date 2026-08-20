@@ -584,7 +584,7 @@ mod tests {
 		let playlist = open_test_playlist().await;
 
 		let audio_path = playlist
-			.download_single_track("J87pJrxvJ5E")
+			.download_single_track("wPzuz7G33UE")
 			.await
 			.expect("failed downloading track");
 
