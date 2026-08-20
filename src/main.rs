@@ -70,7 +70,7 @@ struct ConcurrencyOptions {
 	pool: PoolConcurrencyOptions,
 
 	/// How many futures should be polled at once.
-	#[arg(long = "futures", default_value_t = 32, value_parser = value_parser!(u32).range(1..))]
+	#[arg(long = "futures", default_value_t = 8, value_parser = value_parser!(u32).range(1..))]
 	worker_futures: u32,
 }
 
