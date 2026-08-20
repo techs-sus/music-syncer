@@ -23,7 +23,8 @@ nix shell github:techs-sus/music-syncer
 music-syncer <args>
 ```
 
-Try with cargo:
+Try with cargo (you need ffmpeg installed in your PATH, and may also need
+rustypipe-botguard):
 
 ```bash
 cargo install --locked --git https://github.com/techs-sus/music-syncer.git
