@@ -10,13 +10,13 @@ repositories {
 	google()
 	mavenCentral()
 
-	maven("https://jitpack.io") {
-		content { includeGroup("com.github.MetrolistGroup.innertubex") }
-	}
+	maven("https://jitpack.io") {}
 }
 
 dependencies {
-	implementation(libs.innertubex)
+	implementation(libs.newpipeextractor)
+	implementation(libs.okhttp)
+	implementation(libs.okhttp.brotli)
 	implementation(libs.ktor.client.okhttp)
 	implementation(libs.sqldelight.jvm)
 	implementation(libs.sqldelight.runtime)

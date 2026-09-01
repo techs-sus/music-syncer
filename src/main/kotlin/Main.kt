@@ -1,30 +1,19 @@
 package com.github.techs_sus
 
-import app.cash.sqldelight.db.SqlDriver
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.metrolist.innertubex.InnerTube
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
-import java.nio.file.Path
-import java.util.Properties
-import kotlin.io.path.absolute
-
-class Playlist(val database: Database) {
-	constructor(path: Path) : this {
-		val path = path.absolute();
-
-		val driver: SqlDriver = JdbcSqliteDriver(buildString {
-			append("jdbc:sqlite:").append(path.toString())
-		}, Properties(), Database.Schema);
-
-		val database = Database(driver);
-	}
-}
+import okhttp3.OkHttpClient
+import org.schabi.newpipe.extractor.NewPipe
+import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.downloader.Downloader
+import org.schabi.newpipe.extractor.localization.Localization
 
 suspend fun main() {
-	val client = InnerTube(
-		httpClient = HttpClient(OkHttp),
-	)
+	val downloader = DownloaderImpl.init(OkHttpClient.Builder());
+	NewPipe.init(downloader as Downloader, Localization("en", "US"));
 
-	client.close()
+
+	val youtubeService = ServiceList.YouTube;
+	val playlistExtractor =
+		youtubeService.getPlaylistExtractor("https://music.youtube.com/playlist?list=OLAK5uy_nFiS1SeXBnJII-kBfpg7kGRB0JeE_tot8");
+
+	println("got name: ${playlistExtractor.name}");
 }

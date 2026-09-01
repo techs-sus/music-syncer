@@ -7,3 +7,17 @@ CREATE TABLE IF NOT EXISTS tracks(
 
 	position integer NOT NULL
 );
+
+insertOrUpdateTrack:
+INSERT INTO tracks (title, audio_path, thumbnail_path, position, youtube_video_id) VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (youtube_video_id) DO UPDATE SET
+	title = excluded.title,
+	audio_path = excluded.audio_path,
+	thumbnail_path = excluded.thumbnail_path,
+	position = excluded.position;
+
+removeTrack:
+DELETE FROM tracks WHERE youtube_video_id = ?1;
+
+updateTrackPosition:
+UPDATE tracks SET position = ?1 WHERE youtube_video_id = ?2;
