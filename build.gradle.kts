@@ -6,6 +6,7 @@ plugins {
 
 application {
 	mainClass.set("com.github.techs_sus.MainKt")
+	applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
 }
 
 group = "com.github.techs_sus"
