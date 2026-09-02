@@ -40,11 +40,12 @@ import kotlin.io.path.writeBytes
 private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
 
 open class ProjectException(val string: String) : Exception(string)
+
 class DatabaseIsNotOurs : ProjectException("database is not ours")
 class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
 class FailedFindingThumbnail : ProjectException("failed finding thumbnail")
-class FailedDecodingMime : ProjectException("failed decoding mime type")
 class FailedFetchingThumbnail : ProjectException("failed fetching thumbnail")
+class FailedDecodingMime : ProjectException("failed decoding mime type")
 class FailedFetchingAudio : ProjectException("failed fetching audio")
 class FailedFindingAudioStream : ProjectException("failed finding audio stream")
 class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
@@ -94,7 +95,9 @@ class Playlist(
 
 		val response =
 			http.newCall(
-				okhttp3.Request.Builder().url(url).header("User-Agent", DownloaderImpl.USER_AGENT)
+				okhttp3.Request.Builder()
+					.url(url)
+					.header("User-Agent", DownloaderImpl.USER_AGENT)
 					.header("Referer", "https://music.youtube.com/").build()
 			)
 				.executeAsync()
@@ -127,7 +130,11 @@ class Playlist(
 
 		val response =
 			http.newCall(
-				okhttp3.Request.Builder().url(url).header("User-Agent", DownloaderImpl.USER_AGENT)
+				okhttp3.Request.Builder()
+					.url(url)
+					.header("User-Agent", DownloaderImpl.USER_AGENT)
+					// makes downloads way faster
+					.header("Range", "bytes=0-")
 					.build()
 			)
 				.executeAsync()
@@ -260,68 +267,54 @@ class Playlist(
 		).await()
 	}
 
-	suspend fun syncFromUpstream() = coroutineScope {
-		val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
-			?: throw NoUpstreamPlaylistId()
+	suspend fun syncFromUpstream() = withContext(Dispatchers.Default.limitedParallelism(8, "syncWorkerDispatcher")) {
+		coroutineScope {
+			val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
+				?: throw NoUpstreamPlaylistId()
 
-		data class Stream(val position: Int, val title: String, var existsInDatabase: Boolean)
+			data class Stream(val position: Int, val title: String)
 
-		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
+			val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
 
-		extractor.fetchPage()
+			// fetch the page so that we can get streamCount
+			extractor.fetchPage()
+			val streamCount = extractor.streamCount.toInt()
 
-		// id -> exists
-		val upstreamIdSet = HashMap<String, Stream>(extractor.streamCount.toInt())
+			val upstreamIdSet = HashMap<String, Stream>(streamCount)
 
-		extractor.asIterator().withIndex().forEach { (index, item) ->
-			val videoId = service.streamLHFactory.getId(item.url)
-			upstreamIdSet[videoId] = Stream(position = index, title = item.name, existsInDatabase = false)
-		}
+			// ensure no leftover tracks are in the incoming
+			database.incomingTrackQueries.clear().await()
 
-		var lastPosition: Long = 0
+			extractor.asIterator().withIndex().forEach { (position, item) ->
+				val videoId = service.streamLHFactory.getId(item.url)
+				upstreamIdSet[videoId] = Stream(position = position, title = item.name)
 
-		while (true) {
-			val items = database.trackQueries.getAllStreaming(
-				limit = 50,
-				lastPosition = lastPosition
-			).executeAsList()
+				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
+					.await()
+			}
 
-			if (items.isEmpty()) break
+			database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }.forEach {
+				println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
+			}
 
-			items.forEach {
-				when (upstreamIdSet.contains(it.youtube_video_id)) {
-					true -> {
-						upstreamIdSet[it.youtube_video_id]!!.existsInDatabase = true
-					}
+			database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }.forEach {
+				println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
+			}
 
-					false -> {
-						println("track ${it.youtube_video_id} exists locally but not in the upstream, removing")
-						database.trackQueries.remove(it.youtube_video_id).await()
-					}
+			database.trackQueries.selectIdsAndPositionsAscending().executeAsList().forEach {
+				println("~ track ${it.youtube_video_id} already exists locally at position ${it.position}")
+			}
+
+			// don't leave any leftovers
+			database.incomingTrackQueries.clear().await()
+
+			upstreamIdSet.forEach { (id, stream) ->
+				launch {
+					println("syncing ${stream.title}")
+					syncSingleTrackFromUpstream(id = id, position = stream.position)
+					println("finished syncing ${stream.title}")
 				}
 			}
-
-			lastPosition += items.size
-		}
-
-		upstreamIdSet.forEach { (id, stream) ->
-			launch {
-				syncSingleTrackFromUpstream(id = id, position = stream.position)
-				println("finished syncing ${stream.title}")
-			}
-//			when (stream.existsInDatabase) {
-//				true -> {
-//					// this track already exists in the database, but maybe its position changed, so update
-//					database.trackQueries.updatePosition(position = stream.position.toLong(), youtube_video_id = id).await()
-//				}
-//
-//				false -> {
-//					// this track does not exist in the database, but does exist in the upstream
-//					// so sync it!
-//					println("syncing ${stream.title}")
-//					syncSingleTrackFromUpstream(id = id, title = stream.title, position = stream.position)
-//				}
-//			}
 		}
 	}
 
@@ -360,6 +353,7 @@ class Playlist(
 		private suspend fun createDatabaseFromPath(path: Path): Database {
 			val path = path.toAbsolutePath().normalize()
 
+			// this runs our migrations for us
 			val driver: SqlDriver = JdbcSqliteDriver(
 				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
 			)
@@ -381,13 +375,6 @@ class Playlist(
 						null,
 						"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
 						parameters = 0,
-					).await()
-
-					// run migrations
-					Database.Schema.migrate(
-						driver = driver,
-						oldVersion = 0,
-						newVersion = Database.Schema.version,
 					).await()
 				}
 

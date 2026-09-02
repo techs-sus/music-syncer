@@ -58,7 +58,7 @@ class Cli : SuspendingCliktCommand() {
 }
 
 
-suspend fun main(args: Array<String>) = withContext(Dispatchers.Default) {
+suspend fun main(args: Array<String>) {
 	val downloader = DownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 

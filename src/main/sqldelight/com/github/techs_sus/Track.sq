@@ -22,9 +22,6 @@ DELETE FROM tracks WHERE youtube_video_id = ?1;
 updatePosition:
 UPDATE tracks SET position = ?1 WHERE youtube_video_id = ?2;
 
-getAllStreaming:
-SELECT youtube_video_id, position FROM tracks WHERE position > :lastPosition ORDER BY position LIMIT :limit;
-
 exists:
 SELECT EXISTS(
     SELECT 1
@@ -34,3 +31,22 @@ SELECT EXISTS(
 
 getPathAndTitlesAscending:
 SELECT audio_path, title FROM tracks ORDER BY position ASC;
+
+deleteTracksAbsentFromIncoming:
+DELETE FROM tracks
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM incoming_tracks
+    WHERE incoming_tracks.youtube_video_id = tracks.youtube_video_id
+) RETURNING youtube_video_id, position;
+
+selectIdsAndPositionsAscending:
+SELECT youtube_video_id, position FROM tracks ORDER BY position ASC;
+
+selectTracksOnlyInIncoming:
+SELECT youtube_video_id, position FROM tracks
+WHERE EXISTS (
+    SELECT 1
+    FROM incoming_tracks
+    WHERE incoming_tracks.youtube_video_id = tracks.youtube_video_id
+);
