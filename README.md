@@ -23,7 +23,9 @@ music-syncer-kotlin <args>
 ```
 
 Releases are also available at
-<https://github.com/techs-sus/music-syncer/releases>.
+<https://github.com/techs-sus/music-syncer/releases> and require either the
+`JAVA_HOME` environment variable set or a `java` binary on the path. In simpler
+terms, a Java installation is required to use the releases.
 
 ### Commands/arguments
 
