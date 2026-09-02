@@ -37,7 +37,7 @@ class SyncCommand : SuspendingCliktCommand() {
 
 class WriteToM3uCommand : SuspendingCliktCommand() {
 	val playlist: Playlist by requireObject()
-	val m3uPath by option(help = "optional output m3u path").path()
+	val m3uPath by option(help = "optional output m3u path").path(canBeDir = false)
 
 	override fun help(context: Context) = "Uses a database to write an M3U file"
 
