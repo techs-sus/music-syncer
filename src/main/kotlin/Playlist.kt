@@ -227,7 +227,7 @@ class Playlist(
 			audioFile.commit()
 		}
 
-	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) = coroutineScope {
+	private suspend fun syncSingleTrackFromUpstream(id: String, position: Int) = coroutineScope {
 		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
 
 		withContext(Dispatchers.Default) {
@@ -252,7 +252,7 @@ class Playlist(
 		tagAudio(audioPath = audioPath, thumbnailPath = thumbnailPath, extractor = streamExtractor)
 
 		database.trackQueries.insertOrUpdate(
-			title = title,
+			title = streamExtractor.name,
 			audio_path = audioPath.relativeTo(folder).toString(),
 			thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
 			position = position.toLong(),
@@ -294,7 +294,10 @@ class Playlist(
 						upstreamIdSet[it.youtube_video_id]!!.existsInDatabase = true
 					}
 
-					false -> database.trackQueries.remove(it.youtube_video_id).await()
+					false -> {
+						println("track ${it.youtube_video_id} exists locally but not in the upstream, removing")
+						database.trackQueries.remove(it.youtube_video_id).await()
+					}
 				}
 			}
 
@@ -303,7 +306,7 @@ class Playlist(
 
 		upstreamIdSet.forEach { (id, stream) ->
 			launch {
-				syncSingleTrackFromUpstream(id = id, title = stream.title, position = stream.position)
+				syncSingleTrackFromUpstream(id = id, position = stream.position)
 				println("finished syncing ${stream.title}")
 			}
 //			when (stream.existsInDatabase) {
