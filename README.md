@@ -7,6 +7,9 @@ Uses the actively maintained library
 [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) to get
 stream urls.
 
+Demo:
+[![asciicast](https://asciinema.org/a/HsfeHLFXXSeLcNEP.svg)](https://asciinema.org/a/HsfeHLFXXSeLcNEP)
+
 ## Usage
 
 Try it with
