@@ -11,6 +11,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
+import me.tongfei.progressbar.ProgressBar
 import okhttp3.CompressionInterceptor
 import okhttp3.Gzip
 import okhttp3.OkHttpClient
@@ -321,6 +322,8 @@ class Playlist(
 			}
 		}
 
+		val progressBar = ProgressBar("Syncing", streamCount.toLong())
+
 		// always call sync on tracks in the upstream
 		// why? audio_path and/or thumbnail_path may have been deleted
 		// this lets us reify those values if they were deleted
@@ -328,13 +331,16 @@ class Playlist(
 			coroutineScope {
 				upstreamIdSet.forEach { (id, track) ->
 					launch {
-						println("syncing ${track.title}")
+//						println("syncing ${track.title}")
 						syncSingleTrackFromUpstream(id = id, position = track.position)
-						println("finished syncing ${track.title}")
+//						println("finished syncing ${track.title}")
+						progressBar.step()
 					}
 				}
 			}
 		}
+
+		progressBar.stepTo(streamCount.toLong())
 	}
 
 	suspend fun writeToM3u(path: Path?) {

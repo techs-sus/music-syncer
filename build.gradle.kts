@@ -37,6 +37,8 @@ dependencies {
 
 	implementation(libs.clikt)
 
+	implementation(libs.progressbar)
+
 	testImplementation(kotlin("test"))
 }
 

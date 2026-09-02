@@ -7,6 +7,7 @@ kotlinx-io-core = "0.9.1"
 jaudiotagger = "2.0.32"
 clikt = "5.0.1"
 scrimage = "4.6.7"
+progressbar = "0.10.2"
 
 [libraries]
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
@@ -23,6 +24,7 @@ jaudiotagger = { module = "com.github.RouHim:jaudiotagger", version.ref = "jaudi
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
 scrimage = { module = "com.sksamuel.scrimage:scrimage-core", version.ref = "scrimage" }
 scrimage-webp = { module = "com.sksamuel.scrimage:scrimage-webp", version.ref = "scrimage" }
+progressbar = { module = "me.tongfei:progressbar", version.ref = "progressbar" }
 
 [plugins]
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
