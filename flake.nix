@@ -13,6 +13,7 @@
             jdk25
             gradle
             kotlin
+            ffmpeg
           ];
         };
       };
