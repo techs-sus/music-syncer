@@ -311,8 +311,8 @@ class Playlist(
 			)
 
 			withContext(Dispatchers.IO) {
-				Files.createDirectory(playlist.thumbnailFolder)
-				Files.createDirectory(playlist.audioFolder)
+				runCatching { Files.createDirectory(playlist.thumbnailFolder) }
+				runCatching { Files.createDirectory(playlist.audioFolder) }
 			};
 
 			return playlist
