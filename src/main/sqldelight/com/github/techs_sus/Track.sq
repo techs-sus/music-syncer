@@ -44,9 +44,9 @@ selectIdsAndPositionsAscending:
 SELECT youtube_video_id, position FROM tracks ORDER BY position ASC;
 
 selectTracksOnlyInIncoming:
-SELECT youtube_video_id, position FROM tracks
-WHERE EXISTS (
+SELECT youtube_video_id, position FROM incoming_tracks
+WHERE NOT EXISTS (
     SELECT 1
-    FROM incoming_tracks
-    WHERE incoming_tracks.youtube_video_id = tracks.youtube_video_id
+    FROM tracks
+    WHERE tracks.youtube_video_id = incoming_tracks.youtube_video_id
 );

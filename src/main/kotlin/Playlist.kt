@@ -52,8 +52,6 @@ class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to r
 
 fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	return iterator {
-		this@asIterator.fetchPage()
-
 		var page = this@asIterator.initialPage
 		yieldAll(page.items)
 
@@ -267,52 +265,73 @@ class Playlist(
 		).await()
 	}
 
-	suspend fun syncFromUpstream() = withContext(Dispatchers.Default.limitedParallelism(8, "syncWorkerDispatcher")) {
-		coroutineScope {
-			val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
-				?: throw NoUpstreamPlaylistId()
+	suspend fun syncFromUpstream() = coroutineScope {
+		val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
+			?: throw NoUpstreamPlaylistId()
 
-			data class Stream(val position: Int, val title: String)
+		data class Stream(val position: Int, val title: String)
 
-			val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
+		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
 
-			// fetch the page so that we can get streamCount
-			extractor.fetchPage()
-			val streamCount = extractor.streamCount.toInt()
+		// fetch the page so that we can get streamCount
+		extractor.fetchPage()
+		val streamCount = extractor.streamCount.toInt()
 
-			val upstreamIdSet = HashMap<String, Stream>(streamCount)
+		val upstreamIdSet = HashMap<String, Stream>(if (streamCount > 0) streamCount else 16)
 
-			// ensure no leftover tracks are in the incoming
-			database.incomingTrackQueries.clear().await()
+		// ensure no leftover tracks are in the incoming
+		database.incomingTrackQueries.clear().await()
 
-			extractor.asIterator().withIndex().forEach { (position, item) ->
-				val videoId = service.streamLHFactory.getId(item.url)
-				upstreamIdSet[videoId] = Stream(position = position, title = item.name)
+		extractor.asIterator().withIndex().forEach { (position, item) ->
+			val videoId = service.streamLHFactory.getId(item.url)
+			upstreamIdSet[videoId] = Stream(position = position, title = item.name)
 
-				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
-					.await()
+			database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
+				.await()
+		}
+
+		val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }
+		addedTracks.forEach {
+			println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
+		}
+
+		val deletedTracks = database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }
+		deletedTracks.forEach {
+			println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
+		}
+
+		// don't leave any leftovers
+		database.incomingTrackQueries.clear().await()
+
+		// handle position updates for existing tracks without re-downloading
+		val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
+		val existingPosMap = existingTracks.associateBy { it.youtube_video_id }
+		upstreamIdSet.forEach { (incomingId, incoming) ->
+			val existing = existingPosMap[incomingId] ?: return@forEach
+
+			if (existing.position.toInt() != incoming.position) {
+				println("~ track $incomingId moved from position ${existing.position} to ${incoming.position}")
+
+				database.trackQueries.updatePosition(
+					position = incoming.position.toLong(),
+					youtube_video_id = incomingId
+				).await()
+			} else {
+				println("~ track $incomingId already exists locally at position ${existing.position}")
 			}
+		}
 
-			database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }.forEach {
-				println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
-			}
-
-			database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }.forEach {
-				println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
-			}
-
-			database.trackQueries.selectIdsAndPositionsAscending().executeAsList().forEach {
-				println("~ track ${it.youtube_video_id} already exists locally at position ${it.position}")
-			}
-
-			// don't leave any leftovers
-			database.incomingTrackQueries.clear().await()
-
-			upstreamIdSet.forEach { (id, stream) ->
-				launch {
-					println("syncing ${stream.title}")
-					syncSingleTrackFromUpstream(id = id, position = stream.position)
-					println("finished syncing ${stream.title}")
+		// always call sync on tracks in the upstream
+		// why? audio_path and/or thumbnail_path may have been deleted
+		// this lets us reify those values if they were deleted
+		withContext(Dispatchers.Default.limitedParallelism(8, "syncWorkerDispatcher")) {
+			coroutineScope {
+				upstreamIdSet.forEach { (id, track) ->
+					launch {
+						println("syncing ${track.title}")
+						syncSingleTrackFromUpstream(id = id, position = track.position)
+						println("finished syncing ${track.title}")
+					}
 				}
 			}
 		}
