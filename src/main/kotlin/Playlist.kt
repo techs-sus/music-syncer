@@ -105,6 +105,7 @@ class Playlist(
 		return withContext(Dispatchers.IO) {
 			val path = thumbnailFolder.resolve("$id.$fileExtension")
 			path.writeBytes(response.body.bytes())
+			response.close()
 			return@withContext path
 		}
 	}
@@ -137,6 +138,7 @@ class Playlist(
 				StandardOpenOption.CREATE, StandardOpenOption.WRITE,
 				StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
 			)
+			response.close()
 			return@withContext probablyNotGoodPath
 		}
 	}
