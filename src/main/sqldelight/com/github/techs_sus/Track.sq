@@ -1,0 +1,52 @@
+CREATE TABLE IF NOT EXISTS tracks(
+  youtube_video_id text PRIMARY KEY,
+	title text NOT NULL,
+
+  audio_path text NOT NULL,
+  thumbnail_path text,
+
+	position integer NOT NULL
+);
+
+insertOrUpdate:
+INSERT INTO tracks (title, audio_path, thumbnail_path, position, youtube_video_id) VALUES (?1, ?2, ?3, ?4, ?5)
+ON CONFLICT (youtube_video_id) DO UPDATE SET
+	title = excluded.title,
+	audio_path = excluded.audio_path,
+	thumbnail_path = excluded.thumbnail_path,
+	position = excluded.position;
+
+remove:
+DELETE FROM tracks WHERE youtube_video_id = ?1;
+
+updatePosition:
+UPDATE tracks SET position = ?1 WHERE youtube_video_id = ?2;
+
+exists:
+SELECT EXISTS(
+    SELECT 1
+    FROM tracks
+    WHERE youtube_video_id = :videoId
+);
+
+getPathAndTitlesAscending:
+SELECT audio_path, title FROM tracks ORDER BY position ASC;
+
+deleteTracksAbsentFromIncoming:
+DELETE FROM tracks
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM incoming_tracks
+    WHERE incoming_tracks.youtube_video_id = tracks.youtube_video_id
+) RETURNING youtube_video_id, position;
+
+selectIdsAndPositionsAscending:
+SELECT youtube_video_id, position FROM tracks ORDER BY position ASC;
+
+selectTracksOnlyInIncoming:
+SELECT youtube_video_id, position FROM incoming_tracks
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM tracks
+    WHERE tracks.youtube_video_id = incoming_tracks.youtube_video_id
+);

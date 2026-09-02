@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS incoming_tracks(
+  youtube_video_id text PRIMARY KEY,
+	position integer NOT NULL
+);
+
+insertOrUpdate:
+INSERT INTO incoming_tracks (youtube_video_id, position) VALUES (?1, ?2)
+ON CONFLICT (youtube_video_id) DO UPDATE SET
+	position = excluded.position;
+
+clear:
+DELETE FROM incoming_tracks;

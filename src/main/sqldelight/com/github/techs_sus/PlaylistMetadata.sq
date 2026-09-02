@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS playlist_metadata(
+	singleton_key integer PRIMARY KEY CHECK (singleton_key = 1),
+	youtube_playlist_id text
+);
+
+setUpstreamPlaylistId:
+INSERT INTO playlist_metadata(singleton_key, youtube_playlist_id) VALUES (1, ?1)
+ON CONFLICT(singleton_key) DO UPDATE SET youtube_playlist_id = excluded.youtube_playlist_id;
+
+getUpstreamPlaylistId:
+SELECT youtube_playlist_id FROM playlist_metadata;

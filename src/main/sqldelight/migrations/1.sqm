@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS incoming_tracks(
+  youtube_video_id text PRIMARY KEY,
+	position integer NOT NULL
+);
