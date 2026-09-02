@@ -11,13 +11,6 @@ application {
 group = "com.github.techs_sus"
 version = "1.0-SNAPSHOT"
 
-repositories {
-	google()
-	mavenCentral()
-
-	maven("https://jitpack.io") {}
-}
-
 dependencies {
 	implementation(libs.newpipeextractor)
 
