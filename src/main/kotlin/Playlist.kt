@@ -3,7 +3,12 @@ package com.github.techs_sus
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import com.sksamuel.scrimage.ImmutableImage
+import com.sksamuel.scrimage.nio.PngWriter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
 import okhttp3.CompressionInterceptor
@@ -12,26 +17,24 @@ import okhttp3.OkHttpClient
 import okhttp3.brotli.Brotli
 import okhttp3.coroutines.executeAsync
 import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.audio.generic.AudioFileWriter
 import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.images.Artwork
-import org.jaudiotagger.tag.images.ArtworkFactory
+import org.jaudiotagger.tag.images.StandardArtwork
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
 import org.schabi.newpipe.extractor.stream.StreamExtractor
 import java.nio.file.Files
-import java.nio.file.OpenOption
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Collections.emptyList
 import java.util.Properties
 import kotlin.io.path.deleteExisting
+import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.extension
-import kotlin.io.path.name
 import kotlin.io.path.nameWithoutExtension
+import kotlin.io.path.relativeTo
 import kotlin.io.path.writeBytes
 
 private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
@@ -42,6 +45,7 @@ class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
 class FailedFindingThumbnail : ProjectException("failed finding thumbnail")
 class FailedDecodingMime : ProjectException("failed decoding mime type")
 class FailedFetchingThumbnail : ProjectException("failed fetching thumbnail")
+class FailedFetchingAudio : ProjectException("failed fetching audio")
 class FailedFindingAudioStream : ProjectException("failed finding audio stream")
 class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
 
@@ -75,21 +79,23 @@ class Playlist(
 	private val audioFolder = folder.resolve("audio")
 	private val thumbnailFolder = folder.resolve("thumbnail")
 	private val knownFinalAudioExtension = "m4a"
+	private val knownFinalThumbnailExtension = "png"
 
 	suspend fun setYoutubeUpstream(upstreamPlaylistId: String) {
-		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId).await();
+		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId).await()
 	}
 
 	// Returns the path that the thumbnail was downloaded to.
 	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path {
-		listOf("png", "jpg").forEach {
+		listOf(knownFinalThumbnailExtension, "jpg", "webp").forEach {
 			val path = thumbnailFolder.resolve("$id.$it")
 			if (path.exists()) return path
 		}
 
 		val response =
 			http.newCall(
-				okhttp3.Request.Builder().url(url).addHeader("User-Agent", DownloaderImpl.USER_AGENT).build()
+				okhttp3.Request.Builder().url(url).header("User-Agent", DownloaderImpl.USER_AGENT)
+					.header("Referer", "https://music.youtube.com/").build()
 			)
 				.executeAsync()
 
@@ -98,13 +104,17 @@ class Playlist(
 		val fileExtension = when (response.header("content-type")) {
 			"image/png" -> "png"
 			"image/jpeg" -> "jpg"
+			"image/webp" -> "webp"
 
 			else -> throw FailedDecodingMime()
 		}
 
 		return withContext(Dispatchers.IO) {
 			val path = thumbnailFolder.resolve("$id.$fileExtension")
-			path.writeBytes(response.body.bytes())
+			path.writeBytes(
+				response.body.bytes(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+				StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
+			)
 			response.close()
 			return@withContext path
 		}
@@ -117,12 +127,12 @@ class Playlist(
 
 		val response =
 			http.newCall(
-				okhttp3.Request.Builder().url(url).addHeader("User-Agent", DownloaderImpl.USER_AGENT)
-					.addHeader("Range", "bytes=0-").build()
+				okhttp3.Request.Builder().url(url).header("User-Agent", DownloaderImpl.USER_AGENT)
+					.build()
 			)
 				.executeAsync()
 
-		if (!response.isSuccessful) throw FailedFetchingThumbnail()
+		if (!response.isSuccessful) throw FailedFetchingAudio()
 
 		val fileExtension = when (response.header("content-type")) {
 			"audio/webm" -> "webm"
@@ -183,50 +193,74 @@ class Playlist(
 			outputFile
 		}
 
+	private suspend fun ensureThumbnailIsPng(inputFile: Path): Path = withContext(Dispatchers.IO) {
+		if (inputFile.extension == "png") return@withContext inputFile
+
+		val image = ImmutableImage.loader().fromPath(inputFile)
+		val outputPath = image.output(
+			PngWriter.NoCompression,
+			thumbnailFolder.resolve("${inputFile.nameWithoutExtension}.png")
+		)
+
+		inputFile.deleteIfExists()
+
+		return@withContext outputPath
+	}
+
 	private suspend fun tagAudio(audioPath: Path, thumbnailPath: Path?, extractor: StreamExtractor) =
 		withContext(Dispatchers.IO) {
-			val audioFile = AudioFileIO.read(audioPath.toFile());
-			val tag = audioFile.tagOrCreateAndSetDefault;
+			val audioFile = AudioFileIO.read(audioPath.toFile())
+			val tag = audioFile.tagAndConvertOrCreateAndSetDefault
 
 			// add the thumbnail if it exists
-			if (thumbnailPath != null) tag.addField(ArtworkFactory.createArtworkFromFile(thumbnailPath.toFile()))
+			if (thumbnailPath != null) {
+				val artwork = StandardArtwork.createArtworkFromFile(thumbnailPath.toFile())
 
-			tag.addField(FieldKey.TITLE, extractor.name);
-			tag.addField(FieldKey.ARTIST, extractor.uploaderName);
-			tag.addField(FieldKey.YEAR, extractor.uploadDate?.offsetDateTime()?.year.toString())
+				tag.setField(artwork)
+			}
+
+			tag.setField(FieldKey.TITLE, extractor.name)
+			tag.setField(FieldKey.ARTIST, extractor.uploaderName)
+			tag.setField(FieldKey.YEAR, extractor.uploadDate?.offsetDateTime()?.year.toString())
 
 			// writes the tag to disk
-			audioFile.commit();
+			audioFile.commit()
 		}
 
-	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) {
+	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) = coroutineScope {
 		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
-		streamExtractor.fetchPage()
 
-		val bestThumbnail = streamExtractor.thumbnails.maxByOrNull { it.estimatedResolutionLevel }
+		withContext(Dispatchers.Default) {
+			streamExtractor.fetchPage()
+		}
+
+		val bestThumbnail = streamExtractor.thumbnails.maxByOrNull { it.width * it.height }
 			?: throw FailedFindingThumbnail()
 
-		val thumbnailPath = runCatching {
-			syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)
-		}.getOrNull()
+		val thumbnailPathLazy = async {
+			runCatching { ensureThumbnailIsPng(syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)) }.getOrNull()
+		}
 
 		val bestAudioStream = streamExtractor.audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream()
 		if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
-		val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content))
+		val audioPathLazy = async { ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content)) }
 
-		tagAudio(audioPath = audioPath, thumbnailPath = thumbnailPath, extractor = streamExtractor);
+		val audioPath = audioPathLazy.await()
+		val thumbnailPath = thumbnailPathLazy.await()
+
+		tagAudio(audioPath = audioPath, thumbnailPath = thumbnailPath, extractor = streamExtractor)
 
 		database.trackQueries.insertOrUpdate(
-			youtube_video_id = id,
 			title = title,
+			audio_path = audioPath.relativeTo(folder).toString(),
+			thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
 			position = position.toLong(),
-			thumbnail_path = thumbnailPath?.toString(),
-			audio_path = audioPath.toString()
+			youtube_video_id = id,
 		).await()
 	}
 
-	suspend fun syncFromUpstream() {
+	suspend fun syncFromUpstream() = coroutineScope {
 		val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
 			?: throw NoUpstreamPlaylistId()
 
@@ -268,60 +302,60 @@ class Playlist(
 		}
 
 		upstreamIdSet.forEach { (id, stream) ->
-			when (stream.existsInDatabase) {
-				true -> {
-					// this track already exists in the database, but maybe its position changed, so update
-					database.trackQueries.updatePosition(position = stream.position.toLong(), youtube_video_id = id).await()
-				}
-
-				false -> {
-					// this track does not exist in the database, but does exist in the upstream
-					// so sync it!
-					syncSingleTrackFromUpstream(id = id, title = stream.title, position = stream.position)
-				}
+			launch {
+				syncSingleTrackFromUpstream(id = id, title = stream.title, position = stream.position)
+				println("finished syncing ${stream.title}")
 			}
+//			when (stream.existsInDatabase) {
+//				true -> {
+//					// this track already exists in the database, but maybe its position changed, so update
+//					database.trackQueries.updatePosition(position = stream.position.toLong(), youtube_video_id = id).await()
+//				}
+//
+//				false -> {
+//					// this track does not exist in the database, but does exist in the upstream
+//					// so sync it!
+//					println("syncing ${stream.title}")
+//					syncSingleTrackFromUpstream(id = id, title = stream.title, position = stream.position)
+//				}
+//			}
 		}
 	}
 
 	suspend fun writeToM3u(path: Path?) {
-		val path = path ?: folder.resolve("$name.m3u");
+		val path = path ?: folder.resolve("$name.m3u")
 
-		val bufferedWriter = path.toFile().bufferedWriter();
-		val query = database.trackQueries.getPathAndTitlesAscending();
-		val tracksIterator = query.execute { cursor ->
-			QueryResult.Value(iterator {
-				while (cursor.next().value) yield(query.mapper(cursor))
-			})
-		}.value;
+		val bufferedWriter = path.toFile().bufferedWriter()
+		val query = database.trackQueries.getPathAndTitlesAscending().executeAsList()
 
 		withContext(Dispatchers.IO) {
-			bufferedWriter.write("#EXTM3U");
+			bufferedWriter.write("#EXTM3U\n")
 
-			tracksIterator.forEach {
-				bufferedWriter.write("#EXTINF:0,${it.title}");
-				bufferedWriter.write(it.audio_path);
-			};
+			query.forEach {
+				bufferedWriter.write("#EXTINF:0,${it.title}\n")
+				bufferedWriter.write("${it.audio_path}\n")
+			}
 
-			bufferedWriter.close();
-		};
+			bufferedWriter.close()
+		}
 	}
 
 	companion object {
 		suspend fun createFromPath(path: Path): Playlist {
 			val playlist = Playlist(
-				database = createDatabaseFromPath(path), name = path.name, folder = path.parent
+				database = createDatabaseFromPath(path), name = path.nameWithoutExtension, folder = path.parent
 			)
 
 			withContext(Dispatchers.IO) {
 				runCatching { Files.createDirectory(playlist.thumbnailFolder) }
 				runCatching { Files.createDirectory(playlist.audioFolder) }
-			};
+			}
 
 			return playlist
 		}
 
 		private suspend fun createDatabaseFromPath(path: Path): Database {
-			val path = path.toAbsolutePath().normalize();
+			val path = path.toAbsolutePath().normalize()
 
 			val driver: SqlDriver = JdbcSqliteDriver(
 				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema

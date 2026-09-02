@@ -32,6 +32,8 @@ dependencies {
 	implementation(libs.kotlinx.io.core)
 
 	implementation(libs.jaudiotagger)
+	implementation(libs.scrimage)
+	implementation(libs.scrimage.webp)
 
 	implementation(libs.clikt)
 

@@ -10,6 +10,8 @@ import com.github.ajalt.clikt.parameters.arguments.argument
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.path
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
@@ -56,7 +58,7 @@ class Cli : SuspendingCliktCommand() {
 }
 
 
-suspend fun main(args: Array<String>) {
+suspend fun main(args: Array<String>) = withContext(Dispatchers.Default) {
 	val downloader = DownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 
