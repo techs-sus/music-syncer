@@ -1,5 +1,6 @@
 name: Build and release
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
@@ -14,55 +15,142 @@ jobs:
         include:
           - name: linux-x86_64
             os: ubuntu-latest
-            binary: music-syncer
             archive: music-syncer-linux-x86_64.tar.gz
           - name: macos-arm64
             os: macos-latest
-            binary: music-syncer
             archive: music-syncer-macos-arm64.tar.gz
           - name: windows-x86_64
             os: windows-latest
-            binary: music-syncer.exe
             archive: music-syncer-windows-x86_64.zip
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-      - name: Build
-        run: cargo build --release --locked
-      - name: Package Unix binary
+          distribution: 'temurin'
+          java-version: '25'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Grant execute permission for Gradlew (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x ./gradlew
+      - name: Build with Gradle (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ./gradlew build --stacktrace
+      - name: Build with Gradle (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\gradlew.bat build --stacktrace
+      - name: Package Unix distribution
         if: runner.os != 'Windows'
         shell: bash
         env:
-          BINARY: ${{ matrix.binary }}
           ARCHIVE: ${{ matrix.archive }}
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp "target/release/$BINARY" "dist/$BINARY"
-          tar -C dist -czf "dist/$ARCHIVE" "$BINARY"
-      - name: Package Windows binary
+          # Copy Gradle outputs: distributions (tar/zip) and libs (jar)
+          cp build/distributions/*.tar dist/ 2>/dev/null || true
+          cp build/distributions/*.zip dist/ 2>/dev/null || true
+          cp build/libs/*.jar dist/ 2>/dev/null || true
+          echo "Contents before archiving:"
+          ls -lh dist/ || true
+          ls -lh build/distributions/ || true
+
+          if [[ "$ARCHIVE" == *.tar.gz ]]; then
+            if [ -f "dist/$ARCHIVE" ]; then
+              echo "Archive $ARCHIVE already exists"
+            else
+              # Find a plain .tar to compress, Gradle's distTar creates .tar (not .tar.gz)
+              SRC_TAR=""
+              for f in dist/*.tar; do
+                if [ -f "$f" ]; then
+                  case "$f" in
+                    *.tar.gz) continue ;;
+                    *) SRC_TAR="$f"; break ;;
+                  esac
+                fi
+              done
+              if [ -n "$SRC_TAR" ] && [ -f "$SRC_TAR" ]; then
+                echo "Compressing $SRC_TAR to dist/$ARCHIVE"
+                gzip -c "$SRC_TAR" > "dist/$ARCHIVE"
+              else
+                # Fallback: create archive from dist contents or build outputs
+                echo "No plain tar found, creating $ARCHIVE from build outputs"
+                if [ -d build/distributions ] && ls build/distributions/* >/dev/null 2>&1; then
+                  tar -C dist -czf "dist/$ARCHIVE" --exclude="$ARCHIVE" . 2>/dev/null || tar -C build -czf "dist/$ARCHIVE" distributions libs 2>/dev/null || tar -C dist -czf "dist/$ARCHIVE" .
+                else
+                  tar -C dist -czf "dist/$ARCHIVE" .
+                fi
+              fi
+            fi
+          elif [[ "$ARCHIVE" == *.zip ]]; then
+            if [ -f "dist/$ARCHIVE" ]; then
+              echo "Archive $ARCHIVE already exists"
+            else
+              SRC_ZIP=""
+              for f in dist/*.zip; do
+                [ -f "$f" ] && SRC_ZIP="$f" && break
+              done
+              if [ -n "$SRC_ZIP" ] && [ -f "$SRC_ZIP" ]; then
+                echo "Copying $SRC_ZIP to dist/$ARCHIVE"
+                cp "$SRC_ZIP" "dist/$ARCHIVE"
+              else
+                echo "No zip found, creating $ARCHIVE from dist contents"
+                (cd dist && zip -r "$ARCHIVE" . -x "$ARCHIVE" >/dev/null 2>&1) || (cd build && zip -r "../dist/$ARCHIVE" distributions libs >/dev/null 2>&1) || echo "Failed to create zip"
+              fi
+            fi
+          fi
+          echo "Final dist contents:"
+          ls -lh dist/
+      - name: Package Windows distribution
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          BINARY: ${{ matrix.binary }}
           ARCHIVE: ${{ matrix.archive }}
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "target/release/$env:BINARY" "dist/$env:BINARY"
-          Compress-Archive `
-            -Path "dist/$env:BINARY" `
-            -DestinationPath "dist/$env:ARCHIVE"
+          if (Test-Path "build/distributions") {
+            Copy-Item "build/distributions/*" "dist/" -Force -ErrorAction SilentlyContinue
+          }
+          if (Test-Path "build/libs") {
+            Copy-Item "build/libs/*.jar" "dist/" -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "Contents before archiving:"
+          Get-ChildItem dist -ErrorAction SilentlyContinue | Format-Table Name, Length
+          Write-Host "Gradle distributions:"
+          Get-ChildItem build/distributions -ErrorAction SilentlyContinue | Format-Table Name, Length
+
+          $archive = $env:ARCHIVE
+          $archivePath = "dist/$archive"
+          if (-not (Test-Path $archivePath)) {
+            $existingZip = Get-ChildItem dist/*.zip -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($existingZip) {
+              Copy-Item $existingZip.FullName $archivePath -Force
+              Write-Host "Copied $($existingZip.FullName) to $archivePath"
+            } else {
+              $existingTar = Get-ChildItem dist/*.tar -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($existingTar) {
+                # If only tar exists but we need zip, create zip from dist
+                Compress-Archive -Path "dist/*" -DestinationPath $archivePath -Force
+                Write-Host "Created $archivePath from dist contents (tar existed)"
+              } else {
+                Compress-Archive -Path "dist/*" -DestinationPath $archivePath -Force -ErrorAction SilentlyContinue
+                if (-not (Test-Path $archivePath)) {
+                  # Fallback: zip build outputs directly
+                  Compress-Archive -Path "build/distributions/*", "build/libs/*" -DestinationPath $archivePath -Force -ErrorAction SilentlyContinue
+                }
+                Write-Host "Created $archivePath from dist contents"
+              }
+            }
+          } else {
+            Write-Host "Archive $archivePath already exists"
+          }
+          Write-Host "Final dist contents:"
+          Get-ChildItem dist | Format-Table Name, Length
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -85,8 +173,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ github.ref_name }}
         run: |
+          echo "Downloaded artifacts:"
+          ls -R dist || true
+          ls -lh dist/ || true
+          # Ensure at least one file exists before creating release
+          if ! ls dist/* >/dev/null 2>&1; then
+            echo "No artifacts found in dist/"
+            exit 1
+          fi
           gh release create "$VERSION" \
-            dist/*.tar.gz \
-            dist/*.zip \
+            dist/* \
             --title "Build $VERSION" \
             --generate-notes
