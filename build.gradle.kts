@@ -33,6 +33,8 @@ dependencies {
 
 	implementation(libs.jaudiotagger)
 
+	implementation(libs.clikt)
+
 	testImplementation(kotlin("test"))
 }
 

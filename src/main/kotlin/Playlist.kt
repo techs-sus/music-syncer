@@ -20,13 +20,13 @@ import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeMusicAlbumOrPlaylistInfoItemExtractor
 import org.schabi.newpipe.extractor.stream.StreamExtractor
-import java.io.File
+import java.nio.file.Files
+import java.nio.file.OpenOption
 import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.util.Collections.emptyList
 import java.util.Properties
-import kotlin.io.path.absolute
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.exists
 import kotlin.io.path.extension
@@ -34,7 +34,7 @@ import kotlin.io.path.name
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.writeBytes
 
-private const val SQLITE_APPLICATION_ID = 0x7D8A4B83
+private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
 
 open class ProjectException(val string: String) : Exception(string)
 class DatabaseIsNotOurs : ProjectException("database is not ours")
@@ -75,6 +75,10 @@ class Playlist(
 	private val audioFolder = folder.resolve("audio")
 	private val thumbnailFolder = folder.resolve("thumbnail")
 	private val knownFinalAudioExtension = "m4a"
+
+	suspend fun setYoutubeUpstream(upstreamPlaylistId: String) {
+		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId).await();
+	}
 
 	// Returns the path that the thumbnail was downloaded to.
 	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path {
@@ -128,7 +132,11 @@ class Playlist(
 
 		return withContext(Dispatchers.IO) {
 			val probablyNotGoodPath = audioFolder.resolve("$id.$fileExtension")
-			probablyNotGoodPath.writeBytes(response.body.bytes())
+			probablyNotGoodPath.writeBytes(
+				response.body.bytes(),
+				StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+				StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
+			)
 			return@withContext probablyNotGoodPath
 		}
 	}
@@ -191,6 +199,7 @@ class Playlist(
 
 	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) {
 		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
+		streamExtractor.fetchPage()
 
 		val bestThumbnail = streamExtractor.thumbnails.maxByOrNull { it.estimatedResolutionLevel }
 			?: throw FailedFindingThumbnail()
@@ -222,6 +231,8 @@ class Playlist(
 		data class Stream(val position: Int, val title: String, var existsInDatabase: Boolean)
 
 		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
+
+		extractor.fetchPage()
 
 		// id -> exists
 		val upstreamIdSet = HashMap<String, Stream>(extractor.streamCount.toInt())
@@ -270,48 +281,83 @@ class Playlist(
 		}
 	}
 
+	suspend fun writeToM3u(path: Path?) {
+		val path = path ?: folder.resolve("$name.m3u");
+
+		val bufferedWriter = path.toFile().bufferedWriter();
+		val query = database.trackQueries.getPathAndTitlesAscending();
+		val tracksIterator = query.execute { cursor ->
+			QueryResult.Value(iterator {
+				while (cursor.next().value) yield(query.mapper(cursor))
+			})
+		}.value;
+
+		withContext(Dispatchers.IO) {
+			bufferedWriter.write("#EXTM3U");
+
+			tracksIterator.forEach {
+				bufferedWriter.write("#EXTINF:0,${it.title}");
+				bufferedWriter.write(it.audio_path);
+			};
+
+			bufferedWriter.close();
+		};
+	}
+
 	companion object {
 		suspend fun createFromPath(path: Path): Playlist {
-			return Playlist(
+			val playlist = Playlist(
 				database = createDatabaseFromPath(path), name = path.name, folder = path.parent
 			)
+
+			withContext(Dispatchers.IO) {
+				Files.createDirectory(playlist.thumbnailFolder)
+				Files.createDirectory(playlist.audioFolder)
+			};
+
+			return playlist
 		}
 
 		private suspend fun createDatabaseFromPath(path: Path): Database {
-			val path = path.absolute()
+			val path = path.toAbsolutePath().normalize();
 
-			val driver: SqlDriver = JdbcSqliteDriver(buildString {
-				append("jdbc:sqlite:").append(path.toString())
-			}, Properties(), Database.Schema)
+			val driver: SqlDriver = JdbcSqliteDriver(
+				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
+			)
 
 			val database = Database(driver)
 
 			val applicationId =
-				driver.executeQuery<Long?>(
+				driver.executeQuery(
 					null,
 					"PRAGMA application_id;",
 					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
 					0
 				).await()
 
-			if (applicationId == null || applicationId.toInt() == 0) {
-				// mark it as our own
-				driver.executeQuery<Int?>(
-					null,
-					"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
-					mapper = { QueryResult.Value(null) },
-					0
-				).await()
+			when (applicationId) {
+				null, 0L -> {
+					// mark it as our own, get back the application_id
+					driver.execute(
+						null,
+						"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
+						parameters = 0,
+					).await()
 
-				// run migrations
-				Database.Schema.migrate(
-					driver = driver,
-					oldVersion = 0,
-					newVersion = Database.Schema.version,
-				).await()
-			} else {
-				// this is not our database
-				throw DatabaseIsNotOurs()
+					// run migrations
+					Database.Schema.migrate(
+						driver = driver,
+						oldVersion = 0,
+						newVersion = Database.Schema.version,
+					).await()
+				}
+
+				SQLITE_APPLICATION_ID -> {
+					// already ours
+				}
+
+				// not ours
+				else -> throw DatabaseIsNotOurs()
 			}
 
 			return database

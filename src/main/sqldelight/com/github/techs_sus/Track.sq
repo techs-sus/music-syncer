@@ -31,3 +31,6 @@ SELECT EXISTS(
     FROM tracks
     WHERE youtube_video_id = :videoId
 );
+
+getPathAndTitlesAscending:
+SELECT audio_path, title FROM tracks ORDER BY position ASC;
