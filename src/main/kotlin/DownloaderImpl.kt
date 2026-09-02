@@ -152,6 +152,12 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 		}
 	}
 
+	fun close() {
+		client.dispatcher.executorService.shutdown()
+		client.connectionPool.evictAll()
+		client.cache?.close()
+	}
+
 	companion object {
 		const val USER_AGENT: String = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
 		const val YOUTUBE_RESTRICTED_MODE_COOKIE_KEY: String = "youtube_restricted_mode_key"
@@ -175,6 +181,11 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 
 		fun getInstance(): DownloaderImpl {
 			return instance!!
+		}
+
+		fun closeInstance() {
+			instance?.close()
+			instance = null
 		}
 	}
 }

@@ -73,9 +73,17 @@ class Playlist(
 	).build(),
 
 	private val database: Database,
+	private val driver: SqlDriver,
 	val name: String,
 	val folder: Path,
 ) {
+	fun close() {
+		http.dispatcher.executorService.shutdown()
+		http.connectionPool.evictAll()
+		http.cache?.close()
+		driver.close()
+	}
+
 	private val audioFolder = folder.resolve("audio")
 	private val thumbnailFolder = folder.resolve("thumbnail")
 	private val knownFinalAudioExtension = "m4a"
@@ -236,111 +244,121 @@ class Playlist(
 	private suspend fun syncSingleTrackFromUpstream(id: String, position: Int) = coroutineScope {
 		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
 
-		withContext(Dispatchers.Default) {
+		withContext(Dispatchers.IO) {
 			streamExtractor.fetchPage()
 		}
 
 		val bestThumbnail = streamExtractor.thumbnails.maxByOrNull { it.width * it.height }
 			?: throw FailedFindingThumbnail()
 
-		val thumbnailPathLazy = async {
+		val thumbnailPathLazy = async(Dispatchers.IO) {
 			runCatching { ensureThumbnailIsPng(syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)) }.getOrNull()
 		}
 
 		val bestAudioStream = streamExtractor.audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream()
 		if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
-		val audioPathLazy = async { ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content)) }
+		val audioPathLazy =
+			async(Dispatchers.IO) { ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content)) }
 
 		val audioPath = audioPathLazy.await()
 		val thumbnailPath = thumbnailPathLazy.await()
 
 		tagAudio(audioPath = audioPath, thumbnailPath = thumbnailPath, extractor = streamExtractor)
 
-		database.trackQueries.insertOrUpdate(
-			title = streamExtractor.name,
-			audio_path = audioPath.relativeTo(folder).toString(),
-			thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
-			position = position.toLong(),
-			youtube_video_id = id,
-		).await()
+		withContext(Dispatchers.IO) {
+			database.trackQueries.insertOrUpdate(
+				title = streamExtractor.name,
+				audio_path = audioPath.relativeTo(folder).toString(),
+				thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
+				position = position.toLong(),
+				youtube_video_id = id,
+			).await()
+		}
 	}
 
 	suspend fun syncFromUpstream() = coroutineScope {
-		val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
-			?: throw NoUpstreamPlaylistId()
+		val upstream = withContext(Dispatchers.IO) {
+			database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
+		} ?: throw NoUpstreamPlaylistId()
 
 		data class Stream(val position: Int, val title: String)
 
 		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
 
 		// fetch the page so that we can get streamCount
-		extractor.fetchPage()
+		withContext(Dispatchers.IO) {
+			extractor.fetchPage()
+		}
+
 		val streamCount = extractor.streamCount.toInt()
 
 		val upstreamIdSet = HashMap<String, Stream>(if (streamCount > 0) streamCount else 16)
 
-		// ensure no leftover tracks are in the incoming
-		database.incomingTrackQueries.clear().await()
+		withContext(Dispatchers.IO) {
+			// ensure no leftover tracks are in the incoming
+			database.incomingTrackQueries.clear().await()
 
-		extractor.asIterator().withIndex().forEach { (position, item) ->
-			val videoId = service.streamLHFactory.getId(item.url)
-			upstreamIdSet[videoId] = Stream(position = position, title = item.name)
+			extractor.asIterator().withIndex().forEach { (position, item) ->
+				val videoId = service.streamLHFactory.getId(item.url)
+				upstreamIdSet[videoId] = Stream(position = position, title = item.name)
 
-			database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
-				.await()
-		}
-
-		val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }
-		addedTracks.forEach {
-			println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
-		}
-
-		val deletedTracks = database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }
-		deletedTracks.forEach {
-			println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
-		}
-
-		// don't leave any leftovers
-		database.incomingTrackQueries.clear().await()
-
-		// handle position updates for existing tracks without re-downloading
-		val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
-		val existingPosMap = existingTracks.associateBy { it.youtube_video_id }
-		upstreamIdSet.forEach { (incomingId, incoming) ->
-			val existing = existingPosMap[incomingId] ?: return@forEach
-
-			if (existing.position.toInt() != incoming.position) {
-				println("~ track $incomingId moved from position ${existing.position} to ${incoming.position}")
-
-				database.trackQueries.updatePosition(
-					position = incoming.position.toLong(),
-					youtube_video_id = incomingId
-				).await()
-			} else {
-				println("~ track $incomingId already exists locally at position ${existing.position}")
+				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
+					.await()
 			}
-		}
 
-		val progressBar = ProgressBar("Syncing", streamCount.toLong())
+			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }
+			addedTracks.forEach {
+				println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
+			}
 
-		// always call sync on tracks in the upstream
-		// why? audio_path and/or thumbnail_path may have been deleted
-		// this lets us reify those values if they were deleted
-		withContext(Dispatchers.Default.limitedParallelism(8, "syncWorkerDispatcher")) {
-			coroutineScope {
-				upstreamIdSet.forEach { (id, track) ->
-					launch {
-//						println("syncing ${track.title}")
-						syncSingleTrackFromUpstream(id = id, position = track.position)
-//						println("finished syncing ${track.title}")
-						progressBar.step()
-					}
+			val deletedTracks =
+				database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }
+			deletedTracks.forEach {
+				println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
+			}
+
+			// don't leave any leftovers
+			database.incomingTrackQueries.clear().await()
+
+			// handle position updates for existing tracks without re-downloading
+			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
+			val existingPosMap = existingTracks.associateBy { it.youtube_video_id }
+			upstreamIdSet.forEach { (incomingId, incoming) ->
+				val existing = existingPosMap[incomingId] ?: return@forEach
+
+				if (existing.position.toInt() != incoming.position) {
+					println("~ track $incomingId moved from position ${existing.position} to ${incoming.position}")
+
+					database.trackQueries.updatePosition(
+						position = incoming.position.toLong(),
+						youtube_video_id = incomingId
+					).await()
+				} else {
+					println("~ track $incomingId already exists locally at position ${existing.position}")
 				}
 			}
 		}
 
-		progressBar.stepTo(streamCount.toLong())
+		ProgressBar("Syncing", streamCount.toLong()).use { progressBar ->
+			// always call sync on tracks in the upstream
+			// why? audio_path and/or thumbnail_path may have been deleted
+			// this lets us reify those values if they were deleted
+			withContext(Dispatchers.IO.limitedParallelism(8, "syncWorkerDispatcher")) {
+				coroutineScope {
+					upstreamIdSet.forEach { (id, track) ->
+						launch {
+							syncSingleTrackFromUpstream(id = id, position = track.position)
+							progressBar.step()
+						}
+					}
+				}
+			}
+
+			progressBar.stepTo(streamCount.toLong())
+		}
+
+		return@coroutineScope
 	}
 
 	suspend fun writeToM3u(path: Path?) {
@@ -363,8 +381,9 @@ class Playlist(
 
 	companion object {
 		suspend fun createFromPath(path: Path): Playlist {
+			val (database, driver) = createDatabaseFromPath(path)
 			val playlist = Playlist(
-				database = createDatabaseFromPath(path), name = path.nameWithoutExtension, folder = path.parent
+				database = database, driver = driver, name = path.nameWithoutExtension, folder = path.parent
 			)
 
 			withContext(Dispatchers.IO) {
@@ -375,7 +394,7 @@ class Playlist(
 			return playlist
 		}
 
-		private suspend fun createDatabaseFromPath(path: Path): Database {
+		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, SqlDriver> {
 			val path = path.toAbsolutePath().normalize()
 
 			// this runs our migrations for us
@@ -411,7 +430,7 @@ class Playlist(
 				else -> throw DatabaseIsNotOurs()
 			}
 
-			return database
+			return Pair(database, driver)
 		}
 	}
 }

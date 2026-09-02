@@ -49,18 +49,28 @@ class WriteToM3uCommand : SuspendingCliktCommand() {
 	}
 }
 
+object PlaylistHolder {
+	var playlist: Playlist? = null
+}
+
 class Cli : SuspendingCliktCommand() {
 	val path by option("-p", "--path", help = "sqlite database path").path(canBeDir = false).required()
 
 	override suspend fun run() {
-		currentContext.obj = Playlist.createFromPath(path);
+		val p = Playlist.createFromPath(path)
+		PlaylistHolder.playlist = p
+		currentContext.obj = p
 	}
 }
-
 
 suspend fun main(args: Array<String>) {
 	val downloader = DownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 
-	Cli().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()).main(args)
+	try {
+		Cli().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()).main(args)
+	} finally {
+		PlaylistHolder.playlist?.close()
+		DownloaderImpl.closeInstance()
+	}
 }
