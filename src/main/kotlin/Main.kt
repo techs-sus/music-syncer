@@ -50,7 +50,7 @@ object PlaylistHolder {
 	var playlist: Playlist? = null
 }
 
-class Cli : SuspendingCliktCommand() {
+class MusicSyncerKotlin : SuspendingCliktCommand() {
 	val path by option("-p", "--path", help = "sqlite database path").path(canBeDir = false).required()
 
 	override suspend fun run() {
@@ -65,7 +65,7 @@ suspend fun main(args: Array<String>) {
 	NewPipe.init(downloader, Localization("en", "US"))
 
 	try {
-		Cli().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()).main(args)
+		MusicSyncerKotlin().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()).main(args)
 	} finally {
 		PlaylistHolder.playlist?.close()
 		DownloaderImpl.closeInstance()
