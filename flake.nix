@@ -10,7 +10,7 @@
       perSystem = { pkgs, ... }: {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            jdk21
+            jdk25
             gradle
             kotlin
           ];
