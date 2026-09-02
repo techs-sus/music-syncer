@@ -26,29 +26,29 @@ import kotlin.io.path.name
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.writeBytes
 
-private const val SQLITE_APPLICATION_ID = 0x7D8A4B83;
+private const val SQLITE_APPLICATION_ID = 0x7D8A4B83
 
-open class ProjectException(val string: String) : Exception(string);
-class DatabaseIsNotOurs : ProjectException("database is not ours");
-class NoUpstreamPlaylistId : ProjectException("no upstream playlist id");
-class FailedFindingThumbnail : ProjectException("failed finding thumbnail");
-class FailedDecodingMime : ProjectException("failed decoding mime type");
-class FailedFetchingThumbnail : ProjectException("failed fetching thumbnail");
-class FailedFindingAudioStream : ProjectException("failed finding audio stream");
-class FailedToRemuxAsM4a(val exception: IOException) : ProjectException("failed to remux as m4a: $exception");
+open class ProjectException(val string: String) : Exception(string)
+class DatabaseIsNotOurs : ProjectException("database is not ours")
+class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
+class FailedFindingThumbnail : ProjectException("failed finding thumbnail")
+class FailedDecodingMime : ProjectException("failed decoding mime type")
+class FailedFetchingThumbnail : ProjectException("failed fetching thumbnail")
+class FailedFindingAudioStream : ProjectException("failed finding audio stream")
+class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
 
 fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	return iterator {
-		this@asIterator.fetchPage();
+		this@asIterator.fetchPage()
 
-		var page = this@asIterator.initialPage;
-		yieldAll(page.items);
+		var page = this@asIterator.initialPage
+		yieldAll(page.items)
 
 		while (page.hasNextPage()) {
-			page = this@asIterator.getPage(page.nextPage);
+			page = this@asIterator.getPage(page.nextPage)
 			yieldAll(page.items)
 		}
-	};
+	}
 }
 
 class Playlist(
@@ -64,63 +64,65 @@ class Playlist(
 	val name: String,
 	val folder: Path,
 ) {
-	private val audioFolder = folder.resolve("audio");
-	private val thumbnailFolder = folder.resolve("thumbnail");
-	private val knownFinalAudioExtension = "m4a";
+	private val audioFolder = folder.resolve("audio")
+	private val thumbnailFolder = folder.resolve("thumbnail")
+	private val knownFinalAudioExtension = "m4a"
 
 	// Returns the path that the thumbnail was downloaded to.
 	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path {
 		listOf("png", "jpg").forEach {
-			val path = thumbnailFolder.resolve("$id.$it");
-			if (path.exists()) return path;
-		};
+			val path = thumbnailFolder.resolve("$id.$it")
+			if (path.exists()) return path
+		}
 
 		val response =
-			OkHttpClient().newCall(
+			http.newCall(
 				okhttp3.Request.Builder().url(url).addHeader("User-Agent", DownloaderImpl.USER_AGENT).build()
 			)
-				.executeAsync();
+				.executeAsync()
 
-		if (!response.isSuccessful) throw FailedFetchingThumbnail();
+		if (!response.isSuccessful) throw FailedFetchingThumbnail()
 
 		val fileExtension = when (response.header("content-type")) {
 			"image/png" -> "png"
 			"image/jpeg" -> "jpg"
 
 			else -> throw FailedDecodingMime()
-		};
+		}
 
-		val path = thumbnailFolder.resolve("$id.$fileExtension");
-
-		path.writeBytes(response.body.bytes());
-
-		return path;
+		return withContext(Dispatchers.IO) {
+			val path = thumbnailFolder.resolve("$id.$fileExtension")
+			path.writeBytes(response.body.bytes())
+			return@withContext path
+		}
 	}
 
 	// Returns the path that the audio was downloaded to.
 	private suspend fun syncSingleTrackAudio(id: String, url: String): Path {
-		val knownFinalM4aPath = audioFolder.resolve("$id.$knownFinalAudioExtension");
-		if (knownFinalM4aPath.exists()) return knownFinalM4aPath;
+		val knownFinalM4aPath = audioFolder.resolve("$id.$knownFinalAudioExtension")
+		if (knownFinalM4aPath.exists()) return knownFinalM4aPath
 
 		val response =
-			OkHttpClient().newCall(
+			http.newCall(
 				okhttp3.Request.Builder().url(url).addHeader("User-Agent", DownloaderImpl.USER_AGENT)
 					.addHeader("Range", "bytes=0-").build()
 			)
-				.executeAsync();
+				.executeAsync()
 
-		if (!response.isSuccessful) throw FailedFetchingThumbnail();
+		if (!response.isSuccessful) throw FailedFetchingThumbnail()
 
 		val fileExtension = when (response.header("content-type")) {
 			"audio/webm" -> "webm"
 			"audio/mp4" -> "m4a"
 
 			else -> throw FailedDecodingMime()
-		};
+		}
 
-		val probablyNotGoodPath = audioFolder.resolve("$id.$fileExtension");
-		probablyNotGoodPath.writeBytes(response.body.bytes());
-		return probablyNotGoodPath;
+		return withContext(Dispatchers.IO) {
+			val probablyNotGoodPath = audioFolder.resolve("$id.$fileExtension")
+			probablyNotGoodPath.writeBytes(response.body.bytes())
+			return@withContext probablyNotGoodPath
+		}
 	}
 
 	private suspend fun ensureAudioIsTaggable(inputFile: Path): Path =
@@ -145,7 +147,7 @@ class Playlist(
 					.redirectErrorStream(false)
 					.start()
 			} catch (e: IOException) {
-				throw FailedToRemuxAsM4a(e);
+				throw FailedToRemuxAsM4a(e)
 			}
 
 			val stderr = process.errorStream.bufferedReader().use { it.readText() }
@@ -158,25 +160,25 @@ class Playlist(
 			}
 
 			// no need to keep the webm around
-			inputFile.deleteExisting();
+			inputFile.deleteExisting()
 
 			outputFile
 		}
 
 	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) {
-		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id));
+		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
 
 		val bestThumbnail = streamExtractor.thumbnails.maxByOrNull { it.estimatedResolutionLevel }
-			?: throw FailedFindingThumbnail();
+			?: throw FailedFindingThumbnail()
 
 		val thumbnailPath = runCatching {
 			syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)
-		}.getOrNull();
+		}.getOrNull()
 
-		val bestAudioStream = streamExtractor.audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream();
-		if (!bestAudioStream.isUrl) throw FailedFindingAudioStream();
+		val bestAudioStream = streamExtractor.audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream()
+		if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
-		val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content));
+		val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content))
 
 		database.trackQueries.insertOrUpdate(
 			youtube_video_id = id,
@@ -184,34 +186,34 @@ class Playlist(
 			position = position.toLong(),
 			thumbnail_path = thumbnailPath?.toString(),
 			audio_path = audioPath.toString()
-		).await();
+		).await()
 	}
 
 	suspend fun syncFromUpstream() {
 		val upstream = database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
-			?: throw NoUpstreamPlaylistId();
+			?: throw NoUpstreamPlaylistId()
 
-		data class Stream(val position: Int, val title: String, var existsInDatabase: Boolean);
+		data class Stream(val position: Int, val title: String, var existsInDatabase: Boolean)
 
-		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "");
+		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
 
 		// id -> exists
-		val upstreamIdSet = HashMap<String, Stream>(extractor.streamCount.toInt());
+		val upstreamIdSet = HashMap<String, Stream>(extractor.streamCount.toInt())
 
 		extractor.asIterator().withIndex().forEach { (index, item) ->
-			val videoId = service.streamLHFactory.getId(item.url);
-			upstreamIdSet[videoId] = Stream(position = index, title = item.name, existsInDatabase = false);
+			val videoId = service.streamLHFactory.getId(item.url)
+			upstreamIdSet[videoId] = Stream(position = index, title = item.name, existsInDatabase = false)
 		}
 
-		var lastPosition: Long = 0;
+		var lastPosition: Long = 0
 
 		while (true) {
 			val items = database.trackQueries.getAllStreaming(
 				limit = 50,
 				lastPosition = lastPosition
-			).executeAsList();
+			).executeAsList()
 
-			if (items.isEmpty()) break;
+			if (items.isEmpty()) break
 
 			items.forEach {
 				when (upstreamIdSet.contains(it.youtube_video_id)) {
@@ -220,17 +222,17 @@ class Playlist(
 					}
 
 					false -> database.trackQueries.remove(it.youtube_video_id).await()
-				};
-			};
+				}
+			}
 
-			lastPosition += items.size;
+			lastPosition += items.size
 		}
 
 		upstreamIdSet.forEach { (id, stream) ->
 			when (stream.existsInDatabase) {
 				true -> {
 					// this track already exists in the database, but maybe its position changed, so update
-					database.trackQueries.updatePosition(position = stream.position.toLong(), youtube_video_id = id).await();
+					database.trackQueries.updatePosition(position = stream.position.toLong(), youtube_video_id = id).await()
 				}
 
 				false -> {
@@ -250,13 +252,13 @@ class Playlist(
 		}
 
 		private suspend fun createDatabaseFromPath(path: Path): Database {
-			val path = path.absolute();
+			val path = path.absolute()
 
 			val driver: SqlDriver = JdbcSqliteDriver(buildString {
 				append("jdbc:sqlite:").append(path.toString())
-			}, Properties(), Database.Schema);
+			}, Properties(), Database.Schema)
 
-			val database = Database(driver);
+			val database = Database(driver)
 
 			val applicationId =
 				driver.executeQuery<Long?>(
@@ -264,16 +266,16 @@ class Playlist(
 					"PRAGMA application_id;",
 					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
 					0
-				).await();
+				).await()
 
 			if (applicationId == null || applicationId.toInt() == 0) {
 				// mark it as our own
 				driver.executeQuery<Int?>(
 					null,
 					"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
-					mapper = { cursor -> QueryResult.Value(null) },
+					mapper = { QueryResult.Value(null) },
 					0
-				).await();
+				).await()
 
 				// run migrations
 				Database.Schema.migrate(
@@ -283,10 +285,10 @@ class Playlist(
 				).await()
 			} else {
 				// this is not our database
-				throw DatabaseIsNotOurs();
+				throw DatabaseIsNotOurs()
 			}
 
-			return database;
+			return database
 		}
 	}
 }
