@@ -31,6 +31,8 @@ dependencies {
 	implementation(libs.kotlinx.coroutines.core)
 	implementation(libs.kotlinx.io.core)
 
+	implementation(libs.jaudiotagger)
+
 	testImplementation(kotlin("test"))
 }
 

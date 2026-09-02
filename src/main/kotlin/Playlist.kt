@@ -11,10 +11,18 @@ import okhttp3.Gzip
 import okhttp3.OkHttpClient
 import okhttp3.brotli.Brotli
 import okhttp3.coroutines.executeAsync
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.audio.generic.AudioFileWriter
+import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.images.Artwork
+import org.jaudiotagger.tag.images.ArtworkFactory
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
+import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeMusicAlbumOrPlaylistInfoItemExtractor
+import org.schabi.newpipe.extractor.stream.StreamExtractor
+import java.io.File
 import java.nio.file.Path
 import java.util.Collections.emptyList
 import java.util.Properties
@@ -165,6 +173,22 @@ class Playlist(
 			outputFile
 		}
 
+	private suspend fun tagAudio(audioPath: Path, thumbnailPath: Path?, extractor: StreamExtractor) =
+		withContext(Dispatchers.IO) {
+			val audioFile = AudioFileIO.read(audioPath.toFile());
+			val tag = audioFile.tagOrCreateAndSetDefault;
+
+			// add the thumbnail if it exists
+			if (thumbnailPath != null) tag.addField(ArtworkFactory.createArtworkFromFile(thumbnailPath.toFile()))
+
+			tag.addField(FieldKey.TITLE, extractor.name);
+			tag.addField(FieldKey.ARTIST, extractor.uploaderName);
+			tag.addField(FieldKey.YEAR, extractor.uploadDate?.offsetDateTime()?.year.toString())
+
+			// writes the tag to disk
+			audioFile.commit();
+		}
+
 	private suspend fun syncSingleTrackFromUpstream(id: String, title: String, position: Int) {
 		val streamExtractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
 
@@ -179,6 +203,8 @@ class Playlist(
 		if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
 		val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content))
+
+		tagAudio(audioPath = audioPath, thumbnailPath = thumbnailPath, extractor = streamExtractor);
 
 		database.trackQueries.insertOrUpdate(
 			youtube_video_id = id,
