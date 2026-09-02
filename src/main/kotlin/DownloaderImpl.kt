@@ -1,6 +1,7 @@
+// Kindly adapted from <https://github.com/TeamNewPipe/NewPipe>.
+
 package com.github.techs_sus
 
-import io.ktor.http.contentRangeHeaderValue
 import okhttp3.CompressionInterceptor
 import okhttp3.Gzip
 import okhttp3.OkHttpClient
@@ -19,26 +20,21 @@ import java.util.stream.Collectors
 import java.util.stream.Stream
 
 class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
-	private val mCookies: MutableMap<String?, String?>
+	private val mCookies: MutableMap<String?, String?> = HashMap<String?, String?>()
 
-	val client: OkHttpClient
-
-	init {
-		this.client = builder
-			.readTimeout(
-				30,
-				TimeUnit.SECONDS
-			) //                .cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"),
-			//                        16 * 1024 * 1024))
-			.addInterceptor(
-				CompressionInterceptor(
-					Brotli,
-					Gzip
-				)
+	val client: OkHttpClient = builder
+		.readTimeout(
+			30,
+			TimeUnit.SECONDS
+		) //                .cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"),
+		//                        16 * 1024 * 1024))
+		.addInterceptor(
+			CompressionInterceptor(
+				Brotli,
+				Gzip
 			)
-			.build()
-		this.mCookies = HashMap<String?, String?>()
-	}
+		)
+		.build()
 
 	fun getCookies(url: String): String {
 		val youtubeCookie: String? = (if (url.contains(DownloaderImpl.Companion.YOUTUBE_DOMAIN))
@@ -59,11 +55,11 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 	}
 
 	fun getCookie(key: String?): String? {
-		return mCookies.get(key)
+		return mCookies[key]
 	}
 
 	fun setCookie(key: String?, cookie: String?) {
-		mCookies.put(key, cookie)
+		mCookies[key] = cookie
 	}
 
 	fun removeCookie(key: String?) {
@@ -115,9 +111,7 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 		val dataToSend = request.dataToSend()
 
 		var requestBody: RequestBody? = null
-		if (dataToSend != null) {
-			requestBody = dataToSend.toRequestBody();
-		}
+		if (dataToSend != null) requestBody = dataToSend.toRequestBody();
 
 		val requestBuilder = okhttp3.Request.Builder()
 			.method(httpMethod, requestBody)
@@ -125,7 +119,7 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 			.addHeader("User-Agent", USER_AGENT)
 
 		val cookies = getCookies(url)
-		if (!cookies.isEmpty()) {
+		if (cookies.isNotEmpty()) {
 			requestBuilder.addHeader("Cookie", cookies)
 		}
 
@@ -174,7 +168,7 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 		 */
 		fun init(builder: OkHttpClient.Builder?): DownloaderImpl {
 			instance = DownloaderImpl(
-				if (builder != null) builder else OkHttpClient.Builder()
+				builder ?: OkHttpClient.Builder()
 			)
 			return instance!!
 		}

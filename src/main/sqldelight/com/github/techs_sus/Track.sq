@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS tracks(
 	position integer NOT NULL
 );
 
-insertOrUpdateTrack:
+insertOrUpdate:
 INSERT INTO tracks (title, audio_path, thumbnail_path, position, youtube_video_id) VALUES (?1, ?2, ?3, ?4, ?5)
 ON CONFLICT (youtube_video_id) DO UPDATE SET
 	title = excluded.title,
@@ -16,8 +16,18 @@ ON CONFLICT (youtube_video_id) DO UPDATE SET
 	thumbnail_path = excluded.thumbnail_path,
 	position = excluded.position;
 
-removeTrack:
+remove:
 DELETE FROM tracks WHERE youtube_video_id = ?1;
 
-updateTrackPosition:
+updatePosition:
 UPDATE tracks SET position = ?1 WHERE youtube_video_id = ?2;
+
+getAllStreaming:
+SELECT youtube_video_id, position FROM tracks WHERE position > :lastPosition ORDER BY position LIMIT :limit;
+
+exists:
+SELECT EXISTS(
+    SELECT 1
+    FROM tracks
+    WHERE youtube_video_id = :videoId
+);

@@ -1,6 +1,11 @@
 plugins {
 	kotlin("jvm") version "2.4.10"
 	alias(libs.plugins.sqldelight)
+	application
+}
+
+application {
+	mainClass.set("com.github.techs_sus.MainKt")
 }
 
 group = "com.github.techs_sus"
@@ -15,11 +20,16 @@ repositories {
 
 dependencies {
 	implementation(libs.newpipeextractor)
+
 	implementation(libs.okhttp)
 	implementation(libs.okhttp.brotli)
-	implementation(libs.ktor.client.okhttp)
+	implementation(libs.okhttp.coroutines)
+
 	implementation(libs.sqldelight.jvm)
 	implementation(libs.sqldelight.runtime)
+
+	implementation(libs.kotlinx.coroutines.core)
+	implementation(libs.kotlinx.io.core)
 
 	testImplementation(kotlin("test"))
 }
