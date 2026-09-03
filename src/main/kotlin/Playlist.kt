@@ -1,8 +1,9 @@
 package com.github.techs_sus
 
+import app.cash.sqldelight.async.coroutines.awaitAsList
+import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
-import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.github.ajalt.mordant.animation.coroutines.animateInCoroutine
 import com.github.ajalt.mordant.animation.progress.MultiProgressBarAnimation
 import com.github.ajalt.mordant.animation.progress.advance
@@ -17,7 +18,10 @@ import com.github.ajalt.mordant.widgets.progress.text
 import com.github.ajalt.mordant.widgets.progress.timeElapsed
 import com.sksamuel.scrimage.ImmutableImage
 import com.sksamuel.scrimage.nio.PngWriter
-import kotlinx.coroutines.CoroutineStart
+import io.github.smyrgeorge.sqlx4k.ConnectionPool
+import io.github.smyrgeorge.sqlx4k.sqldelight.Sqlx4kSqldelightDriver
+import io.github.smyrgeorge.sqlx4k.sqlite.ISQLite
+import io.github.smyrgeorge.sqlx4k.sqlite.sqlite
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -44,7 +48,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Collections.emptyList
-import java.util.Properties
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
@@ -142,7 +145,7 @@ class Playlist(
 	}
 
 	suspend fun setYoutubeUpstream(upstreamPlaylistId: String) = withContext(Dispatchers.IO) {
-		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId).await()
+		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId)
 	}
 
 	// Returns the path that the thumbnail was downloaded to.
@@ -296,10 +299,12 @@ class Playlist(
 				return@coroutineScope
 			}
 
-			val streamExtractorLazy = async(Dispatchers.IO, start = CoroutineStart.LAZY) {
-				val extractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
-				extractor.fetchPage()
-				return@async extractor
+			val streamExtractorLazy by lazy {
+				async(Dispatchers.IO) {
+					val extractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
+					extractor.fetchPage()
+					return@async extractor
+				}
 			}
 
 			val thumbnailPathLazy = async(Dispatchers.IO) {
@@ -343,13 +348,13 @@ class Playlist(
 					thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
 					position = stream.position.toLong(),
 					youtube_video_id = id,
-				).await()
+				)
 			}
 		}
 
 	suspend fun syncFromUpstream() = coroutineScope {
 		val upstream = withContext(Dispatchers.IO) {
-			database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
+			database.playlistMetadataQueries.getUpstreamPlaylistId().awaitAsOneOrNull()?.youtube_playlist_id
 		} ?: throw NoUpstreamPlaylistId()
 
 		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
@@ -365,7 +370,7 @@ class Playlist(
 
 		withContext(Dispatchers.IO) {
 			// ensure no leftover tracks are in the incoming
-			database.incomingTrackQueries.clear().await()
+			database.incomingTrackQueries.clear()
 
 			extractor.asIterator().withIndex().forEach { (position, item) ->
 				val videoId = service.streamLHFactory.getId(item.url)
@@ -378,10 +383,9 @@ class Playlist(
 					)
 
 				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
-					.await()
 			}
 
-			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }
+			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().awaitAsList().sortedBy { it.position }
 			addedTracks.forEach {
 				terminal.println(
 					terminal.theme.success(
@@ -393,7 +397,7 @@ class Playlist(
 			}
 
 			val deletedTracks =
-				database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }
+				database.trackQueries.deleteTracksAbsentFromIncoming().awaitAsList().sortedBy { it.position }
 			deletedTracks.forEach {
 				terminal.println(
 					terminal.theme.danger(
@@ -403,10 +407,10 @@ class Playlist(
 			}
 
 			// don't leave any leftovers
-			database.incomingTrackQueries.clear().await()
+			database.incomingTrackQueries.clear()
 
 			// handle position updates for existing tracks
-			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
+			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().awaitAsList()
 
 			coroutineScope {
 				existingTracks.forEach { existing ->
@@ -423,7 +427,7 @@ class Playlist(
 							database.trackQueries.updatePosition(
 								position = incoming.position.toLong(),
 								youtube_video_id = id
-							).await()
+							)
 						}
 					}
 				}
@@ -499,7 +503,7 @@ class Playlist(
 		val path = path ?: folder.resolve("$name.m3u")
 
 		val bufferedWriter = path.toFile().bufferedWriter()
-		val query = database.trackQueries.getPathAndTitlesAscending().executeAsList()
+		val query = database.trackQueries.getPathAndTitlesAscending().awaitAsList()
 
 		bufferedWriter.use {
 			it.write("#EXTM3U\n")
@@ -526,13 +530,31 @@ class Playlist(
 			return playlist
 		}
 
-		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, SqlDriver> {
+		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, Sqlx4kSqldelightDriver<ISQLite>> {
 			val path = path.toAbsolutePath().normalize()
 
-			// this runs our migrations for us
-			val driver: SqlDriver = JdbcSqliteDriver(
-				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
+			val options = ConnectionPool.Options.builder()
+				.minConnections(4)
+				.maxConnections(16)
+				.build()
+
+			val sqlx4kDriver = sqlite(
+				url = "jdbc:sqlite:file:$path?mode=rwc",
+				options = options
 			)
+
+			val driver = Sqlx4kSqldelightDriver(sqlx4kDriver)
+			val version = driver.getVersion()
+			val schema = Database.Schema
+
+			// this runs our migrations for us
+			if (version == 0L) {
+				schema.create(driver).await()
+				driver.setVersion(schema.version)
+			} else if (version < schema.version) {
+				schema.migrate(driver, version, schema.version).await()
+				driver.setVersion(schema.version)
+			}
 
 			val database = Database(driver)
 
@@ -540,7 +562,7 @@ class Playlist(
 				driver.executeQuery(
 					null,
 					"PRAGMA application_id;",
-					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
+					mapper = { cursor -> QueryResult.AsyncValue { cursor.next().await(); cursor.getLong(0) } },
 					0
 				).await()
 
@@ -565,4 +587,19 @@ class Playlist(
 			return Pair(database, driver)
 		}
 	}
+}
+
+private suspend fun Sqlx4kSqldelightDriver<ISQLite>.getVersion(): Long {
+	return executeQuery(
+		null, "PRAGMA user_version;", mapper = {
+			QueryResult.AsyncValue({
+				it.next().await();
+				it.getLong(0)
+			})
+		}, 0, null
+	).await() ?: 0
+}
+
+private suspend fun Sqlx4kSqldelightDriver<ISQLite>.setVersion(version: Long) {
+	execute(null, "PRAGMA user_version = $version", 0, null).await()
 }

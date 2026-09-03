@@ -34,6 +34,10 @@ dependencies {
 	implementation(libs.mordant)
 	implementation(libs.mordant.coroutines)
 
+	implementation(libs.sqlx4k)
+	implementation(libs.sqlx4k.sqlite)
+	implementation(libs.sqlx4k.sqldelight)
+
 	testImplementation(kotlin("test"))
 }
 
@@ -48,9 +52,10 @@ tasks.test {
 sqldelight {
 	databases {
 		register("Database") {
+			generateAsync.set(true)
 			packageName.set("com.github.techs_sus")
 			srcDirs("src/main/sqldelight")
-			dialect(libs.sqldelight.dialect.sqlite)
+			dialect(libs.sqlx4k.dialect.sqlite)
 		}
 	}
 }
