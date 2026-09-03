@@ -322,7 +322,19 @@ class Playlist(
 
 			val audioPathLazy =
 				async(Dispatchers.IO) {
-					if (existingTrackFiles.audioPath !== null) return@async existingTrackFiles.audioPath
+					if (existingTrackFiles.audioPath != null) {
+						// if thumbnail is newly created but audio already exists, retag the audio
+						if (existingTrackFiles.thumbnailPath == null) {
+							tagAudio(
+								audioPath = existingTrackFiles.audioPath,
+								thumbnailPath = thumbnailPathLazy.await(),
+								extractor = streamExtractorLazy.await()
+							)
+						}
+
+						// both audioPath and thumbnailPath are not null, so that means we shouldn't waste time retagging
+						return@async existingTrackFiles.audioPath
+					}
 
 					val bestAudioStream =
 						streamExtractorLazy.await().audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream()
