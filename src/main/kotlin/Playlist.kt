@@ -44,6 +44,7 @@ import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
 import org.schabi.newpipe.extractor.stream.StreamExtractor
+import java.io.Closeable
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -115,8 +116,8 @@ class Playlist(
 	private val terminal: Terminal = Terminal(),
 	val name: String,
 	val folder: Path,
-) {
-	fun close() {
+) : Closeable {
+	override fun close() {
 		http.dispatcher.executorService.shutdown()
 		http.connectionPool.evictAll()
 		http.cache?.close()

@@ -12,6 +12,7 @@ import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
+import java.io.Closeable
 import java.io.IOException
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -19,7 +20,7 @@ import java.util.function.Consumer
 import java.util.stream.Collectors
 import java.util.stream.Stream
 
-class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
+class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), Closeable {
 	private val mCookies: MutableMap<String?, String?> = HashMap<String?, String?>()
 
 	val client: OkHttpClient = builder
@@ -152,7 +153,7 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader() {
 		}
 	}
 
-	fun close() {
+	override fun close() {
 		client.dispatcher.executorService.shutdown()
 		client.connectionPool.evictAll()
 		client.cache?.close()

@@ -57,9 +57,9 @@ class MusicSyncerKotlin : SuspendingCliktCommand() {
 		"Allows for the incremental fetching of playlists using a SQLite database."
 
 	override suspend fun run() {
-		val p = Playlist.createFromPath(path)
-		PlaylistHolder.playlist = p
-		currentContext.obj = p
+		val playlist = Playlist.createFromPath(path)
+		PlaylistHolder.playlist = playlist
+		currentContext.obj = playlist
 	}
 }
 
