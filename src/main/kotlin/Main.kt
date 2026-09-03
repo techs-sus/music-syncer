@@ -53,6 +53,9 @@ object PlaylistHolder {
 class MusicSyncerKotlin : SuspendingCliktCommand() {
 	val path by option("-p", "--path", help = "sqlite database path").path(canBeDir = false).required()
 
+	override fun help(context: Context) =
+		"Allows for the incremental fetching of playlists using a SQLite database."
+
 	override suspend fun run() {
 		val p = Playlist.createFromPath(path)
 		PlaylistHolder.playlist = p
