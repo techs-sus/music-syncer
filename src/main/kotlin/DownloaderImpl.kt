@@ -20,15 +20,15 @@ import java.util.function.Consumer
 import java.util.stream.Collectors
 import java.util.stream.Stream
 
-class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), Closeable {
-	private val mCookies: MutableMap<String?, String?> = HashMap<String?, String?>()
+class DownloaderImpl(builder: OkHttpClient.Builder) : Downloader(), Closeable {
+	private val mCookies: MutableMap<String?, String?> = HashMap()
 
 	val client: OkHttpClient = builder
 		.readTimeout(
 			30,
 			TimeUnit.SECONDS
-		) //                .cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"),
-		//                        16 * 1024 * 1024))
+		)
+		// .cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"), 16 * 1024 * 1024))
 		.addInterceptor(
 			CompressionInterceptor(
 				Brotli,
@@ -38,16 +38,16 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), 
 		.build()
 
 	fun getCookies(url: String): String {
-		val youtubeCookie: String? = (if (url.contains(DownloaderImpl.Companion.YOUTUBE_DOMAIN))
-			getCookie(DownloaderImpl.Companion.YOUTUBE_RESTRICTED_MODE_COOKIE_KEY)
+		val youtubeCookie: String? = (if (url.contains(YOUTUBE_DOMAIN))
+			getCookie(YOUTUBE_RESTRICTED_MODE_COOKIE_KEY)
 		else
-			null);
+			null)
 
 		// Recaptcha cookie is always added TODO: not sure if this is necessary
-		return Stream.of<String?>(youtubeCookie)
+		return Stream.of(youtubeCookie)
 			.filter { obj: String? -> Objects.nonNull(obj) }
-			.flatMap<String> { cookies: String? ->
-				Arrays.stream<String>(
+			.flatMap { cookies: String? ->
+				Arrays.stream(
 					cookies!!.split("; *".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
 				)
 			}
@@ -59,14 +59,14 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), 
 		return mCookies[key]
 	}
 
-	fun setCookie(key: String?, cookie: String?) {
-		mCookies[key] = cookie
-	}
-
-	fun removeCookie(key: String?) {
-		mCookies.remove(key)
-	}
-
+//	fun setCookie(key: String?, cookie: String?) {
+//		mCookies[key] = cookie
+//	}
+//
+//	fun removeCookie(key: String?) {
+//		mCookies.remove(key)
+//	}
+//
 //	fun updateYoutubeRestrictedModeCookies(context: Context) {
 //		val restrictedModeEnabledKey: String? =
 //			context.getString(R.string.youtube_restricted_mode_enabled)
@@ -74,17 +74,17 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), 
 //			.getBoolean(restrictedModeEnabledKey, false)
 //		updateYoutubeRestrictedModeCookies(restrictedModeEnabled)
 //	}
-
-	fun updateYoutubeRestrictedModeCookies(youtubeRestrictedModeEnabled: Boolean) {
-		if (youtubeRestrictedModeEnabled) {
-			setCookie(
-				YOUTUBE_RESTRICTED_MODE_COOKIE_KEY,
-				YOUTUBE_RESTRICTED_MODE_COOKIE
-			)
-		} else {
-			removeCookie(YOUTUBE_RESTRICTED_MODE_COOKIE_KEY)
-		}
-	}
+//
+//	fun updateYoutubeRestrictedModeCookies(youtubeRestrictedModeEnabled: Boolean) {
+//		if (youtubeRestrictedModeEnabled) {
+//			setCookie(
+//				YOUTUBE_RESTRICTED_MODE_COOKIE_KEY,
+//				YOUTUBE_RESTRICTED_MODE_COOKIE
+//			)
+//		} else {
+//			removeCookie(YOUTUBE_RESTRICTED_MODE_COOKIE_KEY)
+//		}
+//	}
 
 	/**
 	 * Get the size of the content that the url is pointing by firing a HEAD request.
@@ -112,7 +112,7 @@ class DownloaderImpl constructor(builder: OkHttpClient.Builder) : Downloader(), 
 		val dataToSend = request.dataToSend()
 
 		var requestBody: RequestBody? = null
-		if (dataToSend != null) requestBody = dataToSend.toRequestBody();
+		if (dataToSend != null) requestBody = dataToSend.toRequestBody()
 
 		val requestBuilder = okhttp3.Request.Builder()
 			.method(httpMethod, requestBody)
