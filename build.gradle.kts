@@ -31,7 +31,8 @@ dependencies {
 
 	implementation(libs.clikt)
 
-	implementation(libs.progressbar)
+	implementation(libs.mordant)
+	implementation(libs.mordant.coroutines)
 
 	testImplementation(kotlin("test"))
 }

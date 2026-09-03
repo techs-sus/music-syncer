@@ -3,6 +3,17 @@ package com.github.techs_sus
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import com.github.ajalt.mordant.animation.coroutines.animateInCoroutine
+import com.github.ajalt.mordant.animation.progress.MultiProgressBarAnimation
+import com.github.ajalt.mordant.animation.progress.advance
+import com.github.ajalt.mordant.rendering.TextAlign
+import com.github.ajalt.mordant.rendering.TextColors
+import com.github.ajalt.mordant.terminal.Terminal
+import com.github.ajalt.mordant.widgets.progress.percentage
+import com.github.ajalt.mordant.widgets.progress.progressBar
+import com.github.ajalt.mordant.widgets.progress.progressBarContextLayout
+import com.github.ajalt.mordant.widgets.progress.text
+import com.github.ajalt.mordant.widgets.progress.timeElapsed
 import com.sksamuel.scrimage.ImmutableImage
 import com.sksamuel.scrimage.nio.PngWriter
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +22,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
-import me.tongfei.progressbar.ProgressBar
 import okhttp3.CompressionInterceptor
 import okhttp3.Gzip
 import okhttp3.OkHttpClient
@@ -63,6 +73,11 @@ fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	}
 }
 
+private enum class ProgressBarStatus {
+	Syncing,
+	Synced
+}
+
 class Playlist(
 	private val service: YoutubeService = ServiceList.YouTube,
 	private val http: OkHttpClient = OkHttpClient().newBuilder().addInterceptor(
@@ -74,6 +89,7 @@ class Playlist(
 
 	private val database: Database,
 	private val driver: SqlDriver,
+	private val terminal: Terminal = Terminal(),
 	val name: String,
 	val folder: Path,
 ) {
@@ -309,54 +325,81 @@ class Playlist(
 
 			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList().sortedBy { it.position }
 			addedTracks.forEach {
-				println("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream")
+				terminal.println(TextColors.brightGreen("+ track ${it.youtube_video_id} was added at position ${it.position}, as it exists in the upstream"))
 			}
 
 			val deletedTracks =
 				database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList().sortedBy { it.position }
 			deletedTracks.forEach {
-				println("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream")
+				terminal.println(TextColors.brightRed("- track ${it.youtube_video_id} was deleted locally at position ${it.position}, as it does not exist in the upstream"))
 			}
 
 			// don't leave any leftovers
 			database.incomingTrackQueries.clear().await()
 
-			// handle position updates for existing tracks without re-downloading
+			// handle position updates for existing tracks
 			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
-			val existingPosMap = existingTracks.associateBy { it.youtube_video_id }
-			upstreamIdSet.forEach { (incomingId, incoming) ->
-				val existing = existingPosMap[incomingId] ?: return@forEach
+			existingTracks.forEach { existing ->
+				val id = existing.youtube_video_id
+				val incoming = upstreamIdSet[id] ?: return@forEach
 
 				if (existing.position.toInt() != incoming.position) {
-					println("~ track $incomingId moved from position ${existing.position} to ${incoming.position}")
+					terminal.println(TextColors.yellow("~ track $id moved from position ${existing.position} to ${incoming.position}"))
 
 					database.trackQueries.updatePosition(
 						position = incoming.position.toLong(),
-						youtube_video_id = incomingId
+						youtube_video_id = id
 					).await()
 				} else {
-					println("~ track $incomingId already exists locally at position ${existing.position}")
+					terminal.println(TextColors.yellow("~ track $id already exists locally at position ${existing.position}"))
 				}
 			}
 		}
 
-		ProgressBar("Syncing", streamCount.toLong()).use { progressBar ->
-			// always call sync on tracks in the upstream
-			// why? audio_path and/or thumbnail_path may have been deleted
-			// this lets us reify those values if they were deleted
-			withContext(Dispatchers.IO.limitedParallelism(8, "syncWorkerDispatcher")) {
-				coroutineScope {
-					upstreamIdSet.forEach { (id, track) ->
-						launch {
-							syncSingleTrackFromUpstream(id = id, position = track.position)
-							progressBar.step()
-						}
+		val overallLayout = progressBarContextLayout<ProgressBarStatus>(alignColumns = false) {
+			text {
+				when (context) {
+					ProgressBarStatus.Synced -> "Done syncing!"
+					ProgressBarStatus.Syncing -> "Syncing..."
+				}
+			}
+			progressBar(width = 20)
+			percentage()
+			timeElapsed(compact = false)
+		}
+
+		val taskLayout = progressBarContextLayout {
+			text(fps = animationFps, align = TextAlign.LEFT) { context }
+			progressBar(width = 20)
+			timeElapsed(compact = false)
+		}
+
+		val progress = MultiProgressBarAnimation(terminal).animateInCoroutine()
+		val overall = progress.addTask(overallLayout, context = ProgressBarStatus.Syncing, total = streamCount.toLong())
+
+		launch { progress.execute() }
+
+		// always call sync on tracks in the upstream
+		// why? audio_path and/or thumbnail_path may have been deleted
+		// this lets us reify those values if they were deleted
+		withContext(Dispatchers.IO.limitedParallelism(8, "syncWorkerDispatcher")) {
+			coroutineScope {
+				upstreamIdSet.forEach { (id, track) ->
+					launch {
+						val bar = progress.addTask(taskLayout, context = track.title, total = 1)
+
+						syncSingleTrackFromUpstream(id = id, position = track.position)
+
+						bar.advance()
+						overall.advance()
+
+						progress.removeTask(bar.id)
 					}
 				}
 			}
-
-			progressBar.stepTo(streamCount.toLong())
 		}
+
+		overall.update { context = ProgressBarStatus.Synced }
 
 		return@coroutineScope
 	}
