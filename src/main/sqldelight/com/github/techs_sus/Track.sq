@@ -38,7 +38,7 @@ WHERE NOT EXISTS (
     SELECT 1
     FROM incoming_tracks
     WHERE incoming_tracks.youtube_video_id = tracks.youtube_video_id
-) RETURNING youtube_video_id, position;
+) RETURNING youtube_video_id, position, title;
 
 selectIdsAndPositionsAscending:
 SELECT youtube_video_id, position FROM tracks ORDER BY position ASC;
