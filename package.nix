@@ -7,7 +7,7 @@
 }:
 (buildGradleApplication {
   pname = "music-syncer-kotlin";
-  version = "0.1.3";
+  version = "git";
   jdk = jdk25;
 
   inherit gradle;
