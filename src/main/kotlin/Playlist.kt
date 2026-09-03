@@ -81,6 +81,21 @@ fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	}
 }
 
+private suspend fun Sqlx4kSqldelightDriver<ISQLite>.getVersion(): Long {
+	return executeQuery(
+		null, "PRAGMA user_version;", mapper = {
+			QueryResult.AsyncValue {
+				it.next().await()
+				it.getLong(0)
+			}
+		}, 0, null
+	).await() ?: 0
+}
+
+private suspend fun Sqlx4kSqldelightDriver<ISQLite>.setVersion(version: Long) {
+	execute(null, "PRAGMA user_version = $version", 0, null).await()
+}
+
 private enum class ProgressBarStatus {
 	Syncing,
 	Synced
@@ -601,17 +616,3 @@ class Playlist(
 	}
 }
 
-private suspend fun Sqlx4kSqldelightDriver<ISQLite>.getVersion(): Long {
-	return executeQuery(
-		null, "PRAGMA user_version;", mapper = {
-			QueryResult.AsyncValue {
-				it.next().await()
-				it.getLong(0)
-			}
-		}, 0, null
-	).await() ?: 0
-}
-
-private suspend fun Sqlx4kSqldelightDriver<ISQLite>.setVersion(version: Long) {
-	execute(null, "PRAGMA user_version = $version", 0, null).await()
-}
