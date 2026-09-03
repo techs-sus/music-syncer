@@ -592,10 +592,10 @@ class Playlist(
 private suspend fun Sqlx4kSqldelightDriver<ISQLite>.getVersion(): Long {
 	return executeQuery(
 		null, "PRAGMA user_version;", mapper = {
-			QueryResult.AsyncValue({
-				it.next().await();
+			QueryResult.AsyncValue {
+				it.next().await()
 				it.getLong(0)
-			})
+			}
 		}, 0, null
 	).await() ?: 0
 }

@@ -31,7 +31,7 @@ class SyncCommand : SuspendingCliktCommand() {
 		"Syncs a database with an upstream YouTube playlist by ensuring all tracks and their thumbnails are downloaded"
 
 	override suspend fun run() {
-		playlist.syncFromUpstream();
+		playlist.syncFromUpstream()
 	}
 }
 
@@ -42,7 +42,7 @@ class WriteToM3uCommand : SuspendingCliktCommand() {
 	override fun help(context: Context) = "Uses a database to write an M3U file"
 
 	override suspend fun run() {
-		playlist.writeToM3u(m3uPath);
+		playlist.writeToM3u(m3uPath)
 	}
 }
 
