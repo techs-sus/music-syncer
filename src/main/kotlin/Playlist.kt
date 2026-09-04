@@ -568,7 +568,7 @@ class Playlist(
 				.build()
 
 			val sqlx4kDriver = sqlite(
-				url = "jdbc:sqlite:file:$path?mode=rwc",
+				url = "sqlite://$path?mode=rwc",
 				options = options
 			)
 
