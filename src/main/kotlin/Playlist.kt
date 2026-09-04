@@ -134,7 +134,7 @@ class Playlist(
 		val audioPath: Path?,
 	)
 
-	private data class MinimalStream(
+	private data class PlaylistStreamItem(
 		val position: Int,
 		val title: String,
 		val thumbnails: List<Image>,
@@ -305,13 +305,13 @@ class Playlist(
 	private suspend fun syncSingleTrackFromUpstream(
 		id: String,
 
-		stream: MinimalStream,
+		playlistStreamItem: PlaylistStreamItem,
 	): Unit =
 		coroutineScope {
 			val existingTrackFiles = getExistingFilesForTrack(id)
 
 			// if this track is already fully synced, do not call the YouTube api
-			if (existingTrackFiles.thumbnailPath != null && existingTrackFiles.audioPath != null && stream.alreadyExistsInDatabase) {
+			if (existingTrackFiles.thumbnailPath != null && existingTrackFiles.audioPath != null && playlistStreamItem.alreadyExistsInDatabase) {
 				return@coroutineScope
 			}
 
@@ -326,11 +326,11 @@ class Playlist(
 			val thumbnailPathLazy = async(Dispatchers.IO) {
 				if (existingTrackFiles.thumbnailPath !== null) return@async existingTrackFiles.thumbnailPath
 
-				// try using the thumbnails from the minimalStream first
-				// else use the streamExtractor's thumbnails
+				// try using the thumbnails from the streamExtractor first
+				// else use the PlaylistStreamInfo's thumbnails
 				// if those fail, throw an error
-				val bestThumbnail = stream.thumbnails.maxByOrNull { it.width * it.height }
-					?: streamExtractorLazy.await().thumbnails.maxByOrNull { it.width * it.height }
+				val bestThumbnail = streamExtractorLazy.await().thumbnails.maxByOrNull { it.width * it.height }
+					?: playlistStreamItem.thumbnails.maxByOrNull { it.width * it.height }
 					?: throw FailedFindingThumbnail()
 
 				runCatching { ensureThumbnailIsPng(syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)) }.getOrNull()
@@ -371,10 +371,10 @@ class Playlist(
 
 			withContext(Dispatchers.IO) {
 				database.trackQueries.insertOrUpdate(
-					title = stream.title,
+					title = playlistStreamItem.title,
 					audio_path = audioPath.relativeTo(folder).toString(),
 					thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
-					position = stream.position.toLong(),
+					position = playlistStreamItem.position.toLong(),
 					youtube_video_id = id,
 				)
 			}
@@ -394,7 +394,7 @@ class Playlist(
 
 		val streamCount = extractor.streamCount.toInt()
 
-		val upstreamIdSet = HashMap<String, MinimalStream>(if (streamCount > 0) streamCount else 16)
+		val upstreamIdSet = HashMap<String, PlaylistStreamItem>(if (streamCount > 0) streamCount else 16)
 
 		withContext(Dispatchers.IO) {
 			// ensure no leftover tracks are in the incoming
@@ -403,7 +403,7 @@ class Playlist(
 			extractor.asIterator().withIndex().forEach { (position, item) ->
 				val videoId = service.streamLHFactory.getId(item.url)
 				upstreamIdSet[videoId] =
-					MinimalStream(
+					PlaylistStreamItem(
 						position = position,
 						title = item.name,
 						alreadyExistsInDatabase = false,
@@ -452,10 +452,11 @@ class Playlist(
 						if (existing.position.toInt() != incoming.position) {
 							terminal.println(terminal.theme.info("~ track \"${incoming.title}\" moved from position ${existing.position} to ${incoming.position}"))
 
-							database.trackQueries.updatePosition(
-								position = incoming.position.toLong(),
-								youtube_video_id = id
-							)
+							// no need to do this as syncSingleTrackFromUpstream will always update the position no matter what
+							//	database.trackQueries.updatePosition(
+							//		position = incoming.position.toLong(),
+							//		youtube_video_id = id
+							//	)
 						}
 					}
 				}
@@ -502,7 +503,7 @@ class Playlist(
 								syncSingleTrackFromUpstream(
 									id = id,
 
-									stream = stream,
+									playlistStreamItem = stream,
 								)
 							}.exceptionOrNull()
 
