@@ -573,19 +573,6 @@ class Playlist(
 			)
 
 			val driver = Sqlx4kSqldelightDriver(sqlx4kDriver)
-			val version = driver.getVersion()
-			val schema = Database.Schema
-
-			// this runs our migrations for us
-			if (version == 0L) {
-				schema.create(driver).await()
-				driver.setVersion(schema.version)
-			} else if (version < schema.version) {
-				schema.migrate(driver, version, schema.version).await()
-				driver.setVersion(schema.version)
-			}
-
-			val database = Database(driver)
 
 			val applicationId =
 				driver.executeQuery(
@@ -612,6 +599,20 @@ class Playlist(
 				// not ours
 				else -> throw DatabaseIsNotOurs()
 			}
+
+			val version = driver.getVersion()
+			val schema = Database.Schema
+
+			// database is now ours, so it is safe to run migrations
+			if (version == 0L) {
+				schema.create(driver).await()
+				driver.setVersion(schema.version)
+			} else if (version < schema.version) {
+				schema.migrate(driver, version, schema.version).await()
+				driver.setVersion(schema.version)
+			}
+
+			val database = Database(driver)
 
 			return Pair(database, driver)
 		}
