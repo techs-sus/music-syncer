@@ -35,14 +35,14 @@ To run the releases, download the release artifact ending in a ".tar" or ".zip".
 Extract the release artifact to a folder. This will contain two folders, `bin`
 and `lib`.
 
-Navigate to `bin` in a terminal and run `music-syncer-kotlin` on linux/macos/
-unix or `music-syncer-kotlin.bat` on Windows.
+Navigate to `bin` in a terminal and run `music-syncer-kotlin` on Linux/Mac/Unix
+or `music-syncer-kotlin.bat` on Windows. The arguments are specified below.
 
 ### Commands/arguments
 
-All commands currently require `--playlist <playlist-db-location>`. `--playlist`
-can also be substituted for `-p`. For example:
-`music-syncer-kotlin --playlist ~/Music/folder/name.db`.
+All commands currently require `--path <playlist-db-location>`. `--path` can
+also be substituted for `-p`. For example:
+`music-syncer-kotlin --path ~/Music/folder/name.db`.
 
 > [!NOTE]
 > You should manually create the parents of the folder containing the database
