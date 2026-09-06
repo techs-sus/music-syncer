@@ -27,8 +27,16 @@ music-syncer-kotlin <args>
 
 Releases are also available at
 <https://github.com/techs-sus/music-syncer/releases> and require either the
-`JAVA_HOME` environment variable set or a `java` binary on the path. In simpler
-terms, a Java installation is required to use the releases.
+`JAVA_HOME` environment variable set or a `java` binary on the PATH. In simpler
+terms, a Java installation is required to use the releases. You also need ffmpeg
+properly available on the PATH or else audio remuxing will not work.
+
+To run the releases, download the release artifact ending in a ".tar" or ".zip".
+Extract the release artifact to a folder. This will contain two folders, `bin`
+and `lib`.
+
+Navigate to `bin` in a terminal and run `music-syncer-kotlin` on linux/macos/
+unix or `music-syncer-kotlin.bat` on Windows.
 
 ### Commands/arguments
 
