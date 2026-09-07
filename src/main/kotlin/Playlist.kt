@@ -310,11 +310,7 @@ class Playlist(
 		coroutineScope {
 			val existingTrackFiles = getExistingFilesForTrack(id)
 
-			// if this track is already fully synced, do not call the YouTube api
-			if (existingTrackFiles.thumbnailPath != null && existingTrackFiles.audioPath != null && playlistStreamItem.alreadyExistsInDatabase) {
-				return@coroutineScope
-			}
-
+			// this is lazy to prevent unnecessary calls to InnerTube
 			val streamExtractorLazy by lazy {
 				async(Dispatchers.IO) {
 					val extractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
