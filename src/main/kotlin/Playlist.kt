@@ -187,10 +187,16 @@ class Playlist(
 			}
 
 			val path = thumbnailFolder.resolve("$id.$fileExtension")
-			path.writeBytes(
-				it.body.bytes(), StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-				StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
-			)
+
+			it.body.byteStream().use { input ->
+				Files.newOutputStream(
+					path, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
+				).buffered().use { out ->
+					input.copyTo(out)
+				}
+			}
+
 			return@withContext path
 		}
 	}
@@ -219,11 +225,16 @@ class Playlist(
 			}
 
 			val downloadedAudioPath = audioFolder.resolve("$id.$fileExtension")
-			downloadedAudioPath.writeBytes(
-				it.body.bytes(),
-				StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-				StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
-			)
+
+			it.body.byteStream().use { input ->
+				Files.newOutputStream(
+					downloadedAudioPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
+				).buffered().use { out ->
+					input.copyTo(out)
+				}
+			}
+
 			return@withContext downloadedAudioPath
 		}
 	}
