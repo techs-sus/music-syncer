@@ -408,18 +408,20 @@ class Playlist(
 			// ensure no leftover tracks are in the incoming
 			database.incomingTrackQueries.clear()
 
-			extractor.asIterator().withIndex().forEach { (position, item) ->
-				val videoId = service.streamLHFactory.getId(item.url)
-				upstreamIdSet[videoId] =
-					PlaylistStreamItem(
-						position = position,
-						title = item.name,
-						alreadyExistsInDatabase = false,
-						thumbnails = item.thumbnails,
-						duration = item.duration,
-					)
+			database.transaction {
+				extractor.asIterator().withIndex().forEach { (position, item) ->
+					val videoId = service.streamLHFactory.getId(item.url)
+					upstreamIdSet[videoId] =
+						PlaylistStreamItem(
+							position = position,
+							title = item.name,
+							alreadyExistsInDatabase = false,
+							thumbnails = item.thumbnails,
+							duration = item.duration,
+						)
 
-				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
+					database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
+				}
 			}
 
 			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().awaitAsList().sortedBy { it.position }
