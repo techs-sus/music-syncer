@@ -448,27 +448,24 @@ class Playlist(
 			// don't leave any leftovers
 			database.incomingTrackQueries.clear()
 
-			// handle position updates for existing tracks
+			// this removes annoying log output like 0->1, 1->2, 2->3
 			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().awaitAsList()
+			var previousNewPosition = -1
+			var orderPreserved = true
 
-			coroutineScope {
-				existingTracks.forEach { existing ->
-					launch {
-						val id = existing.youtube_video_id
-						val incoming = upstreamIdSet[id] ?: return@launch
+			for ((id) in existingTracks) {
+				val incoming = upstreamIdSet[id] ?: continue
+				incoming.alreadyExistsInDatabase = true
 
-						incoming.alreadyExistsInDatabase = true
+				if (incoming.position < previousNewPosition) orderPreserved = false
+				else if (orderPreserved) previousNewPosition = incoming.position
+			}
 
-						// only output if the track was moved, otherwise the terminal will be spammed
-						if (existing.position.toInt() != incoming.position) {
-							terminal.println(terminal.theme.info("~ track \"${incoming.title}\" moved from position ${existing.position} to ${incoming.position}"))
-
-							// no need to do this as syncSingleTrackFromUpstream will always update the position no matter what
-							//	database.trackQueries.updatePosition(
-							//		position = incoming.position.toLong(),
-							//		youtube_video_id = id
-							//	)
-						}
+			if (!orderPreserved) {
+				for ((id, position) in existingTracks) {
+					val incoming = upstreamIdSet[id] ?: continue
+					if (position.toInt() != incoming.position) {
+						terminal.println(terminal.theme.info("~ track \"${incoming.title}\" moved from position $position to ${incoming.position}"))
 					}
 				}
 			}
