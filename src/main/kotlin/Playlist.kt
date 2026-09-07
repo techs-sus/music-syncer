@@ -139,6 +139,7 @@ class Playlist(
 		val title: String,
 		val thumbnails: List<Image>,
 		var alreadyExistsInDatabase: Boolean,
+		val duration: Long,
 	)
 
 	private suspend fun getExistingFilesForTrack(id: String): LocalTrackInfo = withContext(Dispatchers.IO) {
@@ -372,6 +373,7 @@ class Playlist(
 					thumbnail_path = thumbnailPath?.relativeTo(folder).toString(),
 					position = playlistStreamItem.position.toLong(),
 					youtube_video_id = id,
+					duration = playlistStreamItem.duration,
 				)
 			}
 		}
@@ -403,7 +405,8 @@ class Playlist(
 						position = position,
 						title = item.name,
 						alreadyExistsInDatabase = false,
-						thumbnails = item.thumbnails
+						thumbnails = item.thumbnails,
+						duration = item.duration,
 					)
 
 				database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
@@ -528,13 +531,13 @@ class Playlist(
 		val path = path ?: folder.resolve("$name.m3u")
 
 		val bufferedWriter = path.toFile().bufferedWriter()
-		val query = database.trackQueries.getPathAndTitlesAscending().awaitAsList()
+		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().awaitAsList()
 
 		bufferedWriter.use {
 			it.write("#EXTM3U\n")
 
 			query.forEach { track ->
-				it.write("#EXTINF:0,${track.title}\n")
+				it.write("#EXTINF:${track.duration ?: 0},${track.title}\n")
 				it.write("${track.audio_path}\n")
 			}
 		}
