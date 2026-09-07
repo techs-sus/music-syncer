@@ -1,11 +1,13 @@
 [versions]
+kotlin = "2.4.20"
+
 newpipeextractor = "0.26.5"
 sqldelight = "2.3.2"
 okhttp = "5.5.0"
 kotlinx-coroutines-core = "1.11.0"
 kotlinx-io-core = "0.9.1"
 jaudiotagger = "2.0.32"
-clikt = "5.0.1"
+clikt = "5.1.0"
 scrimage = "4.6.7"
 mordant = "3.1.0"
 sqlx4k = "1.13.1"
