@@ -143,14 +143,13 @@ class Playlist(
 	)
 
 	private suspend fun getExistingFilesForTrack(id: String): LocalTrackInfo = withContext(Dispatchers.IO) {
-		var thumbnailPath: Path? = null
 		var audioPath: Path? = null
 
 		// knownFinalThumbnailExtension should always be the highest priority
-		listOf("webp", "jpg", knownFinalThumbnailExtension).forEach {
-			val path = thumbnailFolder.resolve("$id.$it")
-			if (path.exists()) thumbnailPath = path
-		}
+		val thumbnailPath =
+			listOf(knownFinalThumbnailExtension, "jpg", "webp").map { thumbnailFolder.resolve("$id.$it") }.firstOrNull {
+				it.exists()
+			}
 
 		val knownFinalM4aPath = audioFolder.resolve("$id.$knownFinalAudioExtension")
 		if (knownFinalM4aPath.exists()) audioPath = knownFinalM4aPath
