@@ -9,18 +9,57 @@ import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.path
+import com.github.ajalt.mordant.terminal.Terminal
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
+import kotlin.system.exitProcess
 
 class InitCommand : SuspendingCliktCommand() {
 	val playlist: Playlist by requireObject()
 	val upstream: String by option("-u", "--upstream", help = "upstream playlist id").required()
 
-	override fun help(context: Context) = "Initializes a database with an upstream YouTube playlist"
+	override fun help(context: Context) =
+		"Initializes a database with an upstream YouTube playlist. Must be given a playlist id and not a playlist URL"
 
 	override suspend fun run() {
+		val terminal = Terminal()
+
+		if (upstream.startsWith("http") || !playlist.isValidPlaylist(upstream)) {
+			terminal.println(terminal.theme.danger("error: invalid playlist id"))
+			terminal.println()
+			terminal.println(
+				"You ${terminal.theme.warning("must")} give a playlist id, ${
+					terminal.theme.warning(
+						"NOT"
+					)
+				} a url."
+			)
+			terminal.println(
+				"If you gave a url and it looks like this: https://music.youtube.com/playlist?list=${
+					terminal.theme.success(
+						"VALUE"
+					)
+				}"
+			)
+			terminal.println(
+				"then please pass in the ${
+					terminal.theme.success(
+						"VALUE"
+					)
+				} part and ${
+					terminal.theme.warning(
+						"NOT"
+					)
+				} the full url"
+			)
+
+			exitProcess(1)
+		}
+
 		playlist.setYoutubeUpstream(upstream)
+
+		terminal.println(terminal.theme.success("successfully set playlist upstream"))
 	}
 }
 

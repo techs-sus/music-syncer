@@ -160,6 +160,16 @@ class Playlist(
 		)
 	}
 
+	suspend fun isValidPlaylist(upstreamPlaylistId: String): Boolean = withContext(Dispatchers.IO) {
+		val extractor = service.getPlaylistExtractor(upstreamPlaylistId, emptyList(), "")
+
+		extractor.fetchPage()
+
+		return@withContext runCatching {
+			extractor.streamCount
+		}.isSuccess
+	}
+
 	suspend fun setYoutubeUpstream(upstreamPlaylistId: String) = withContext(Dispatchers.IO) {
 		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId)
 	}
