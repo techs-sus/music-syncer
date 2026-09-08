@@ -25,6 +25,8 @@ import io.github.smyrgeorge.sqlx4k.sqlite.sqlite
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -55,7 +57,6 @@ import kotlin.io.path.exists
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.relativeTo
-import kotlin.io.path.writeBytes
 
 private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
 
@@ -64,11 +65,11 @@ open class ProjectException(val string: String) : Exception(string)
 class DatabaseIsNotOurs : ProjectException("database is not ours")
 class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
 class FailedFindingThumbnail : ProjectException("failed finding thumbnail")
-class FailedFetchingThumbnail : ProjectException("failed fetching thumbnail")
 class FailedDecodingMime : ProjectException("failed decoding mime type")
-class FailedFetchingAudio : ProjectException("failed fetching audio")
+class NoContentTypeHeader : ProjectException("there was no content type header")
 class FailedFindingAudioStream : ProjectException("failed finding audio stream")
 class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
+class FailedDownloadingFromUrl : ProjectException("failed downloading from url")
 
 fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	return iterator {
@@ -100,6 +101,16 @@ private suspend fun Sqlx4kSqldelightDriver<ISQLite>.setVersion(version: Long) {
 private enum class ProgressBarStatus {
 	Syncing,
 	Synced
+}
+
+sealed class TrackStatus(val title: String, val currentPosition: Int) {
+	class Added(title: String, currentPosition: Int) : TrackStatus(title, currentPosition)
+	class Removed(title: String, currentPosition: Int) : TrackStatus(title, currentPosition)
+	class Moved(title: String, currentPosition: Int, val oldPosition: Int) : TrackStatus(title, currentPosition)
+
+	class Errored(
+		title: String, currentPosition: Int, val exception: Throwable
+	) : TrackStatus(title, currentPosition)
 }
 
 class Playlist(
@@ -138,7 +149,6 @@ class Playlist(
 		val position: Int,
 		val title: String,
 		val thumbnails: List<Image>,
-		var alreadyExistsInDatabase: Boolean,
 		val duration: Long,
 	)
 
@@ -174,21 +184,46 @@ class Playlist(
 		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId)
 	}
 
-	// Returns the path that the thumbnail was downloaded to.
-	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path = withContext(Dispatchers.IO) {
-		val response =
-			http.newCall(
-				okhttp3.Request.Builder()
-					.url(url)
-					.header("User-Agent", DownloaderImpl.USER_AGENT)
-					.header("Referer", "https://music.youtube.com/").build()
-			)
-				.executeAsync()
+	private suspend fun downloadFromUrl(
+		url: String,
+		outputPathForContentType: (contentType: String) -> Path,
 
+		addSpecialRangeHeader: Boolean = false
+	): Path = withContext(Dispatchers.IO) {
+		var request = okhttp3.Request.Builder()
+			.url(url)
+			.header("User-Agent", DownloaderImpl.USER_AGENT)
+			.header("Referer", "https://music.youtube.com/")
+
+		var destination: Path
+
+		if (addSpecialRangeHeader) request = request.header("Range", "bytes=0-")
+
+		val response = http.newCall(request.build()).executeAsync()
 		response.use {
-			if (!it.isSuccessful) throw FailedFetchingThumbnail()
+			if (!it.isSuccessful) throw FailedDownloadingFromUrl()
 
-			val fileExtension = when (it.header("content-type")) {
+			val contentType = it.header("content-type") ?: throw NoContentTypeHeader()
+
+			destination = outputPathForContentType(contentType)
+
+			it.body.byteStream().use { input ->
+				Files.newOutputStream(
+					destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
+				).buffered().use { out ->
+					input.copyTo(out)
+				}
+			}
+		}
+
+		return@withContext destination
+	}
+
+	// Returns the path that the thumbnail was downloaded to.
+	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path =
+		downloadFromUrl(url, {
+			val fileExtension = when (it) {
 				"image/png" -> "png"
 				"image/jpeg" -> "jpg"
 				"image/webp" -> "webp"
@@ -196,68 +231,32 @@ class Playlist(
 				else -> throw FailedDecodingMime()
 			}
 
-			val path = thumbnailFolder.resolve("$id.$fileExtension")
-
-			it.body.byteStream().use { input ->
-				Files.newOutputStream(
-					path, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
-				).buffered().use { out ->
-					input.copyTo(out)
-				}
-			}
-
-			return@withContext path
-		}
-	}
+			thumbnailFolder.resolve("$id.$fileExtension")
+		})
 
 	// Returns the path that the audio was downloaded to.
-	private suspend fun syncSingleTrackAudio(id: String, url: String): Path = withContext(Dispatchers.IO) {
-		val response =
-			http.newCall(
-				okhttp3.Request.Builder()
-					.url(url)
-					.header("User-Agent", DownloaderImpl.USER_AGENT)
-					// makes downloads way faster
-					.header("Range", "bytes=0-")
-					.build()
-			)
-				.executeAsync()
-
-		response.use {
-			if (!it.isSuccessful) throw FailedFetchingAudio()
-
-			val fileExtension = when (it.header("content-type")) {
+	private suspend fun syncSingleTrackAudio(id: String, url: String): Path =
+		downloadFromUrl(url, {
+			val fileExtension = when (it) {
 				"audio/webm" -> "webm"
 				"audio/mp4" -> "m4a"
 
 				else -> throw FailedDecodingMime()
 			}
 
-			val downloadedAudioPath = audioFolder.resolve("$id.$fileExtension")
+			audioFolder.resolve("$id.$fileExtension")
+		}, addSpecialRangeHeader = true)
 
-			it.body.byteStream().use { input ->
-				Files.newOutputStream(
-					downloadedAudioPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
-				).buffered().use { out ->
-					input.copyTo(out)
-				}
-			}
-
-			return@withContext downloadedAudioPath
-		}
-	}
 
 	private suspend fun ensureAudioIsTaggable(inputFile: Path): Path =
 		withContext(Dispatchers.IO) {
 			// already taggable, avoid invoking FFmpeg and deleting the file
-			if (inputFile.extension.equals("m4a", ignoreCase = true)) {
+			if (inputFile.extension.equals(knownFinalAudioExtension, ignoreCase = true)) {
 				return@withContext inputFile
 			}
 
 			val outputFile = inputFile.resolveSibling(
-				"${inputFile.nameWithoutExtension}.m4a"
+				"${inputFile.nameWithoutExtension}.$knownFinalAudioExtension"
 			)
 
 			val process = try {
@@ -289,13 +288,14 @@ class Playlist(
 			outputFile
 		}
 
-	private suspend fun ensureThumbnailIsPng(inputFile: Path): Path = withContext(Dispatchers.IO) {
-		if (inputFile.extension == "png") return@withContext inputFile
+	private suspend fun ensureThumbnailIsUsableInTag(inputFile: Path): Path = withContext(Dispatchers.IO) {
+		if (inputFile.extension == knownFinalThumbnailExtension) return@withContext inputFile
 
 		val image = ImmutableImage.loader().fromPath(inputFile)
 		val outputPath = image.output(
-			PngWriter.NoCompression,
-			thumbnailFolder.resolve("${inputFile.nameWithoutExtension}.png")
+			// this is lossless compression
+			PngWriter.MaxCompression,
+			thumbnailFolder.resolve("${inputFile.nameWithoutExtension}.$knownFinalThumbnailExtension")
 		)
 
 		inputFile.deleteIfExists()
@@ -350,7 +350,14 @@ class Playlist(
 					?: playlistStreamItem.thumbnails.maxByOrNull { it.width * it.height }
 					?: throw FailedFindingThumbnail()
 
-				runCatching { ensureThumbnailIsPng(syncSingleTrackThumbnail(id = id, url = bestThumbnail.url)) }.getOrNull()
+				runCatching {
+					ensureThumbnailIsUsableInTag(
+						syncSingleTrackThumbnail(
+							id = id,
+							url = bestThumbnail.url
+						)
+					)
+				}.getOrNull()
 			}
 
 			val audioPathLazy =
@@ -421,62 +428,16 @@ class Playlist(
 			database.transaction {
 				extractor.asIterator().withIndex().forEach { (position, item) ->
 					val videoId = service.streamLHFactory.getId(item.url)
+
 					upstreamIdSet[videoId] =
 						PlaylistStreamItem(
 							position = position,
 							title = item.name,
-							alreadyExistsInDatabase = false,
 							thumbnails = item.thumbnails,
 							duration = item.duration,
 						)
 
 					database.incomingTrackQueries.insertOrUpdate(youtube_video_id = videoId, position = position.toLong())
-				}
-			}
-
-			val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().awaitAsList().sortedBy { it.position }
-			addedTracks.forEach {
-				terminal.println(
-					terminal.theme.success(
-						"+ track \"${
-							upstreamIdSet[it.youtube_video_id]?.title ?: it.youtube_video_id
-						}\" was added at position ${it.position}, as it exists in the upstream"
-					)
-				)
-			}
-
-			val deletedTracks =
-				database.trackQueries.deleteTracksAbsentFromIncoming().awaitAsList().sortedBy { it.position }
-			deletedTracks.forEach {
-				terminal.println(
-					terminal.theme.danger(
-						"- track \"${it.title}\" was deleted locally at position ${it.position}, as it does not exist in the upstream"
-					)
-				)
-			}
-
-			// don't leave any leftovers
-			database.incomingTrackQueries.clear()
-
-			// this removes annoying log output like 0->1, 1->2, 2->3
-			val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().awaitAsList()
-			var previousNewPosition = -1
-			var orderPreserved = true
-
-			for ((id) in existingTracks) {
-				val incoming = upstreamIdSet[id] ?: continue
-				incoming.alreadyExistsInDatabase = true
-
-				if (incoming.position < previousNewPosition) orderPreserved = false
-				else if (orderPreserved) previousNewPosition = incoming.position
-			}
-
-			if (!orderPreserved) {
-				for ((id, position) in existingTracks) {
-					val incoming = upstreamIdSet[id] ?: continue
-					if (position.toInt() != incoming.position) {
-						terminal.println(terminal.theme.info("~ track \"${incoming.title}\" moved from position $position to ${incoming.position}"))
-					}
 				}
 			}
 		}
@@ -504,46 +465,142 @@ class Playlist(
 
 		launch { progress.execute() }
 
-		val semaphore = Semaphore(8)
+		val statusFlow = channelFlow {
+			launch(Dispatchers.IO) {
+				val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().awaitAsList()
 
-		// always call sync on tracks in the upstream
-		// why? audio_path and/or thumbnail_path may have been deleted
-		// this lets us reify those values if they were deleted
-		coroutineScope {
-			upstreamIdSet.forEach { (id, stream) ->
-				launch(Dispatchers.Default) {
-					semaphore.withPermit {
-						val task =
-							progress.addTask(taskLayout, context = stream.title, total = 1)
+				addedTracks.map {
+					TrackStatus.Added(
+						title = upstreamIdSet[it.youtube_video_id]!!.title,
+						currentPosition = it.position.toInt()
+					)
+				}.forEach {
+					send(it)
+				}
+			}
 
-						val exception =
-							runCatching {
-								syncSingleTrackFromUpstream(
-									id = id,
+			launch(Dispatchers.IO) {
+				val deletedTracks =
+					database.trackQueries.deleteTracksAbsentFromIncoming().awaitAsList()
+				deletedTracks.map {
+					TrackStatus.Removed(
+						title = it.title,
+						currentPosition = it.position.toInt()
+					)
+				}.forEach {
+					send(it)
+				}
+			}
 
-									playlistStreamItem = stream,
-								)
-							}.exceptionOrNull()
+			launch(Dispatchers.IO) {
+				val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().awaitAsList()
+				var previousNewPosition = -1
+				var orderPreserved = true
 
-						if (exception != null) {
-							terminal.println(terminal.theme.danger("! track \"${stream.title}\" failed to sync: ${exception.message ?: exception.toString()}"))
+				for ((id) in existingTracks) {
+					val incoming = upstreamIdSet[id] ?: continue
+
+					if (incoming.position < previousNewPosition) orderPreserved = false
+					else if (orderPreserved) previousNewPosition = incoming.position
+				}
+
+				if (orderPreserved) return@launch
+
+				for ((id, position) in existingTracks) {
+					val incoming = upstreamIdSet[id] ?: continue
+					if (position.toInt() == incoming.position) continue
+
+					send(
+						TrackStatus.Moved(
+							title = incoming.title,
+							currentPosition = incoming.position,
+							oldPosition = position.toInt()
+						)
+					)
+				}
+			}
+
+			launch {
+				val semaphore = Semaphore(8)
+
+				// always call sync on tracks in the upstream
+				// why? audio_path and/or thumbnail_path may have been deleted
+				// this lets us reify those values if they were deleted
+				coroutineScope {
+					upstreamIdSet.forEach { (id, stream) ->
+						launch(Dispatchers.Default) {
+							semaphore.withPermit {
+								val task = progress.addTask(taskLayout, context = stream.title, total = 1)
+								progress.refresh(refreshAll = true)
+
+								runCatching {
+									syncSingleTrackFromUpstream(
+										id = id,
+
+										playlistStreamItem = stream,
+									)
+								}.onFailure {
+									send(
+										TrackStatus.Errored(
+											title = stream.title,
+											currentPosition = stream.position,
+											exception = it
+										)
+									)
+								}
+
+								overall.advance()
+								task.advance()
+								progress.removeTask(task.id)
+							}
 						}
-
-						task.advance()
-						overall.advance()
-
-						progress.removeTask(task.id)
 					}
 				}
 			}
 		}
 
+		// after this call everything is guaranteed to be finished
+		val list = statusFlow.toList().sortedBy { it.currentPosition }
+
+		// don't leave any leftovers
+		database.incomingTrackQueries.clear()
+
 		overall.update {
 			context = ProgressBarStatus.Synced
 			completed = streamCount.toLong()
+			total = streamCount.toLong()
 		}
 
-		return@coroutineScope
+		progress.refresh(refreshAll = true)
+		progress.stop()
+
+		list.forEach {
+			when (it) {
+				is TrackStatus.Added -> terminal.println(
+					terminal.theme.success(
+						"+ track \"${it.title}\" was added at position ${it.currentPosition}, as it exists in the upstream"
+					)
+				)
+
+				is TrackStatus.Removed -> terminal.println(
+					terminal.theme.warning(
+						"- track \"${it.title}\" was deleted locally at position ${it.currentPosition}, as it does not exist in the upstream"
+					)
+				)
+
+				is TrackStatus.Moved -> terminal.println(
+					terminal.theme.info(
+						"~ track \"${it.title}\" moved from position ${it.oldPosition} to ${it.currentPosition}"
+					)
+				)
+
+				is TrackStatus.Errored -> terminal.println(
+					terminal.theme.danger(
+						"! track \"${it.title}\" failed to sync: ${it.exception.message ?: it.exception.toString()}"
+					)
+				)
+			}
+		}
 	}
 
 	suspend fun writeToM3u(path: Path?) = withContext(Dispatchers.IO) {
