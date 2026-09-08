@@ -22,6 +22,7 @@ nix run github:techs-sus/music-syncer -- <args>
 
 nix shell github:techs-sus/music-syncer
 
+# please see the section Commands/Arguments
 music-syncer-kotlin <args>
 ```
 
@@ -53,6 +54,14 @@ also be substituted for `-p`. For example:
 Initializes a playlist at `<playlist-db-location>` and sets its upstream to
 `<upstream-youtube-playlist-id>`. You can also pass in `-u` instead of
 `--upstream`.
+
+**You must give a playlist id, and not a link.**
+
+> How do I get a playlist id?
+
+Given a link
+`https://music.youtube.com/playlist?list=VALUE`,
+the YouTube playlist id would be `VALUE`.
 
 #### `sync`
 
