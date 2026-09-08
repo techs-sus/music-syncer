@@ -28,7 +28,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
@@ -462,6 +464,7 @@ class Playlist(
 
 		val progress = MultiProgressBarAnimation(terminal).animateInCoroutine()
 		val overall = progress.addTask(overallLayout, context = ProgressBarStatus.Syncing, total = streamCount.toLong())
+		val progressMutex = Mutex()
 
 		launch { progress.execute() }
 
@@ -530,8 +533,7 @@ class Playlist(
 					upstreamIdSet.forEach { (id, stream) ->
 						launch(Dispatchers.Default) {
 							semaphore.withPermit {
-								val task = progress.addTask(taskLayout, context = stream.title, total = 1)
-								progress.refresh(refreshAll = true)
+								val task = progressMutex.withLock { progress.addTask(taskLayout, context = stream.title, total = 1) }
 
 								runCatching {
 									syncSingleTrackFromUpstream(
@@ -549,9 +551,11 @@ class Playlist(
 									)
 								}
 
-								overall.advance()
-								task.advance()
-								progress.removeTask(task.id)
+								progressMutex.withLock {
+									overall.advance()
+									task.advance()
+									progress.removeTask(task.id)
+								}
 							}
 						}
 					}
@@ -571,8 +575,10 @@ class Playlist(
 			total = streamCount.toLong()
 		}
 
-		progress.refresh(refreshAll = true)
-		progress.stop()
+		progressMutex.withLock {
+			progress.refresh(refreshAll = true)
+			progress.stop()
+		}
 
 		list.forEach {
 			when (it) {
