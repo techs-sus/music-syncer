@@ -55,13 +55,16 @@ Initializes a playlist at `<playlist-db-location>` and sets its upstream to
 `<upstream-youtube-playlist-id>`. You can also pass in `-u` instead of
 `--upstream`.
 
+> [!NOTE]
+> It may fail the first time saying SQLITE_BUSY, if so, you should run it again
+> and it will work. This will be fixed soon.
+
 **You must give a playlist id, and not a link.**
 
 > How do I get a playlist id?
 
-Given a link
-`https://music.youtube.com/playlist?list=VALUE`,
-the YouTube playlist id would be `VALUE`.
+Given a link `https://music.youtube.com/playlist?list=VALUE`, the YouTube
+playlist id would be `VALUE`.
 
 #### `sync`
 
