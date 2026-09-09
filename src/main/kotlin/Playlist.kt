@@ -1,9 +1,8 @@
 package com.github.techs_sus
 
-import app.cash.sqldelight.async.coroutines.awaitAsList
-import app.cash.sqldelight.async.coroutines.awaitAsOneOrNull
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
 import com.github.ajalt.mordant.animation.coroutines.animateInCoroutine
 import com.github.ajalt.mordant.animation.progress.MultiProgressBarAnimation
 import com.github.ajalt.mordant.animation.progress.advance
@@ -18,10 +17,6 @@ import com.github.ajalt.mordant.widgets.progress.text
 import com.github.ajalt.mordant.widgets.progress.timeElapsed
 import com.sksamuel.scrimage.ImmutableImage
 import com.sksamuel.scrimage.nio.PngWriter
-import io.github.smyrgeorge.sqlx4k.ConnectionPool
-import io.github.smyrgeorge.sqlx4k.sqldelight.Sqlx4kSqldelightDriver
-import io.github.smyrgeorge.sqlx4k.sqlite.ISQLite
-import io.github.smyrgeorge.sqlx4k.sqlite.sqlite
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -53,6 +48,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Collections.emptyList
+import java.util.Properties
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
@@ -83,21 +79,6 @@ fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 			yieldAll(page.items)
 		}
 	}
-}
-
-private suspend fun Sqlx4kSqldelightDriver<ISQLite>.getVersion(): Long {
-	return executeQuery(
-		null, "PRAGMA user_version;", mapper = {
-			QueryResult.AsyncValue {
-				it.next().await()
-				it.getLong(0)
-			}
-		}, 0, null
-	).await() ?: 0
-}
-
-private suspend fun Sqlx4kSqldelightDriver<ISQLite>.setVersion(version: Long) {
-	execute(null, "PRAGMA user_version = $version", 0, null).await()
 }
 
 private enum class ProgressBarStatus {
@@ -409,7 +390,7 @@ class Playlist(
 
 	suspend fun syncFromUpstream() = coroutineScope {
 		val upstream = withContext(Dispatchers.IO) {
-			database.playlistMetadataQueries.getUpstreamPlaylistId().awaitAsOneOrNull()?.youtube_playlist_id
+			database.playlistMetadataQueries.getUpstreamPlaylistId().executeAsOneOrNull()?.youtube_playlist_id
 		} ?: throw NoUpstreamPlaylistId()
 
 		val extractor = service.getPlaylistExtractor(upstream, emptyList(), "")
@@ -470,7 +451,7 @@ class Playlist(
 
 		val statusFlow = channelFlow {
 			launch(Dispatchers.IO) {
-				val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().awaitAsList()
+				val addedTracks = database.trackQueries.selectTracksOnlyInIncoming().executeAsList()
 
 				addedTracks.map {
 					TrackStatus.Added(
@@ -484,7 +465,7 @@ class Playlist(
 
 			launch(Dispatchers.IO) {
 				val deletedTracks =
-					database.trackQueries.deleteTracksAbsentFromIncoming().awaitAsList()
+					database.trackQueries.deleteTracksAbsentFromIncoming().executeAsList()
 				deletedTracks.map {
 					TrackStatus.Removed(
 						title = it.title,
@@ -496,7 +477,7 @@ class Playlist(
 			}
 
 			launch(Dispatchers.IO) {
-				val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().awaitAsList()
+				val existingTracks = database.trackQueries.selectIdsAndPositionsAscending().executeAsList()
 				var previousNewPosition = -1
 				var orderPreserved = true
 
@@ -613,7 +594,7 @@ class Playlist(
 		val path = path ?: folder.resolve("$name.m3u")
 
 		val bufferedWriter = path.toFile().bufferedWriter()
-		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().awaitAsList()
+		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().executeAsList()
 
 		bufferedWriter.use {
 			it.write("#EXTM3U\n")
@@ -640,26 +621,19 @@ class Playlist(
 			return playlist
 		}
 
-		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, Sqlx4kSqldelightDriver<ISQLite>> {
+		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, SqlDriver> {
 			val path = path.toAbsolutePath().normalize()
 
-			val options = ConnectionPool.Options.builder()
-				.minConnections(4)
-				.maxConnections(16)
-				.build()
-
-			val sqlx4kDriver = sqlite(
-				url = "sqlite://$path?mode=rwc",
-				options = options
+			// this runs our migrations for us
+			val driver: SqlDriver = JdbcSqliteDriver(
+				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
 			)
-
-			val driver = Sqlx4kSqldelightDriver(sqlx4kDriver)
 
 			val applicationId =
 				driver.executeQuery(
 					null,
 					"PRAGMA application_id;",
-					mapper = { cursor -> QueryResult.AsyncValue { cursor.next().await(); cursor.getLong(0) } },
+					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
 					0
 				).await()
 
@@ -679,18 +653,6 @@ class Playlist(
 
 				// not ours
 				else -> throw DatabaseIsNotOurs()
-			}
-
-			val version = driver.getVersion()
-			val schema = Database.Schema
-
-			// database is now ours, so it is safe to run migrations
-			if (version == 0L) {
-				schema.create(driver).await()
-				driver.setVersion(schema.version)
-			} else if (version < schema.version) {
-				schema.migrate(driver, version, schema.version).await()
-				driver.setVersion(schema.version)
 			}
 
 			val database = Database(driver)
