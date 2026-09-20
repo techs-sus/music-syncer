@@ -39,11 +39,11 @@ and `lib`.
 Navigate to `bin` in a terminal and run `music-syncer-kotlin` on Linux/Mac/Unix
 or `music-syncer-kotlin.bat` on Windows. The arguments are specified below.
 
-### Commands/arguments
+### Playlist subcommands/arguments
 
-All commands currently require `--path <playlist-db-location>`. `--path` can
-also be substituted for `-p`. For example:
-`music-syncer-kotlin --path ~/Music/folder/name.db`.
+All playlist commands currently require `--path <playlist-db-location>`.
+`--path` can also be substituted for `-p`. For example:
+`music-syncer-kotlin playlist --path ~/Music/folder/name.db`.
 
 > [!NOTE]
 > You should manually create the parents of the folder containing the database
@@ -83,3 +83,13 @@ Writes an m3u playlist to `<optional-m3u-path>`, defaulting to
 `{folder}/{name}.m3u` if not given. Provides the positions and human readable
 names of tracks for music players. Without this, your playlist will look very
 messy.
+
+### Other notable subcommands
+
+#### `clean-container --container <required-path-to-container>`
+
+Specify a container to clean with `--container` or `-c`.
+
+Deletes tracks and their thumbnails that are not present in any playlist inside
+of the container. A container is the parent of the database file. For example,
+the database file `~/Music/video/test.db` has a container of `~/Music/video`.
