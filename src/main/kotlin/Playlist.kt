@@ -57,7 +57,7 @@ import kotlin.io.path.relativeTo
 
 private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
 
-open class ProjectException(val string: String) : Exception(string)
+sealed class ProjectException(val string: String) : Exception(string)
 
 class DatabaseIsNotOurs : ProjectException("database is not ours")
 class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
@@ -182,15 +182,14 @@ class Playlist(
 
 		if (addSpecialRangeHeader) request = request.header("Range", "bytes=0-")
 
-		val response = http.newCall(request.build()).executeAsync()
-		response.use {
-			if (!it.isSuccessful) throw FailedDownloadingFromUrl()
+		http.newCall(request.build()).executeAsync().use { response ->
+			if (!response.isSuccessful) throw FailedDownloadingFromUrl()
 
-			val contentType = it.header("content-type") ?: throw NoContentTypeHeader()
+			val contentType = response.header("content-type") ?: throw NoContentTypeHeader()
 
 			destination = outputPathForContentType(contentType)
 
-			it.body.byteStream().use { input ->
+			response.body.byteStream().use { input ->
 				Files.newOutputStream(
 					destination, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
 					StandardOpenOption.SYNC, StandardOpenOption.TRUNCATE_EXISTING
@@ -407,7 +406,7 @@ class Playlist(
 
 		val streamCount = extractor.streamCount.toInt()
 
-		val upstreamIdSet = HashMap<String, PlaylistStreamItem>(if (streamCount > 0) streamCount else 16)
+		val upstreamIdSet = HashMap<String, PlaylistStreamItem>(streamCount)
 
 		withContext(Dispatchers.IO) {
 			// ensure no leftover tracks are in the incoming
