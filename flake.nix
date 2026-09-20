@@ -21,6 +21,8 @@
             wrapperPropertiesPath = ./gradle/wrapper/gradle-wrapper.properties;
             defaultJava = pkgs.jdk25;
           };
+
+          package = pkgs.callPackage ./package.nix { inherit gradle; };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
@@ -39,10 +41,12 @@
                 gradle
                 kotlin
                 ffmpeg
+
+                package.updateVerificationMetadata
               ];
             };
 
-          packages.default = pkgs.callPackage ./package.nix { inherit gradle; };
+          packages.default = package;
 
           formatter = pkgs.nixfmt-tree;
         };
