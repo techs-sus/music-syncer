@@ -6,7 +6,7 @@ plugins {
 
 application {
 	mainClass.set("com.github.techs_sus.MainKt")
-	applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+	applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
 }
 
 group = "com.github.techs_sus"
@@ -33,6 +33,8 @@ dependencies {
 
 	implementation(libs.mordant)
 	implementation(libs.mordant.coroutines)
+
+	implementation(libs.slf4j.nop)
 
 	testImplementation(kotlin("test"))
 }
