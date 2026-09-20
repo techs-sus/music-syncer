@@ -5,7 +5,7 @@ import com.github.ajalt.clikt.command.SuspendingNoOpCliktCommand
 import com.github.ajalt.clikt.command.main
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.obj
-import com.github.ajalt.clikt.core.registerJvmCloseable
+import com.github.ajalt.clikt.core.registerCloseable
 import com.github.ajalt.clikt.core.requireObject
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.options.defaultLazy
@@ -187,7 +187,7 @@ class PlaylistCommand : SuspendingCliktCommand() {
 
 	override suspend fun run() {
 		val playlist = Playlist.createFromPath(path)
-		currentContext.obj = currentContext.registerJvmCloseable(playlist)
+		currentContext.obj = currentContext.registerCloseable(playlist)
 	}
 }
 
