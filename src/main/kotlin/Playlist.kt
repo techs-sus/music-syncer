@@ -96,6 +96,9 @@ sealed class TrackStatus(val title: String, val currentPosition: Int) {
 	) : TrackStatus(title, currentPosition)
 }
 
+const val knownFinalAudioExtension = "m4a"
+const val knownFinalThumbnailExtension = "png"
+
 class Playlist(
 	private val service: YoutubeService = ServiceList.YouTube,
 	private val http: OkHttpClient = OkHttpClient().newBuilder().addInterceptor(
@@ -120,8 +123,6 @@ class Playlist(
 
 	private val audioFolder = folder.resolve("audio")
 	private val thumbnailFolder = folder.resolve("thumbnail")
-	private val knownFinalAudioExtension = "m4a"
-	private val knownFinalThumbnailExtension = "png"
 
 	private data class LocalTrackInfo(
 		val thumbnailPath: Path?,
@@ -346,13 +347,17 @@ class Playlist(
 			val audioPathLazy =
 				async(Dispatchers.IO) {
 					if (existingTrackFiles.audioPath != null) {
-						// if thumbnail is newly created but audio already exists, retag the audio
+						// if thumbnail is newly created but audio already exists, retag the audio if possible
+						// if the stream is unavailable, then the stream extractor will throw when we try to await it
+						// and if the track is already downloaded, but stream is unavailable, then the db call would be skipped
 						if (existingTrackFiles.thumbnailPath == null) {
-							tagAudio(
-								audioPath = existingTrackFiles.audioPath,
-								thumbnailPath = thumbnailPathLazy.await(),
-								extractor = streamExtractorLazy.await()
-							)
+							runCatching {
+								tagAudio(
+									audioPath = existingTrackFiles.audioPath,
+									thumbnailPath = thumbnailPathLazy.await(),
+									extractor = streamExtractorLazy.await()
+								)
+							}
 						}
 
 						// both audioPath and thumbnailPath are not null, so that means we shouldn't waste time retagging
@@ -360,7 +365,8 @@ class Playlist(
 					}
 
 					val bestAudioStream =
-						streamExtractorLazy.await().audioStreams.maxByOrNull { it.bitrate } ?: throw FailedFindingAudioStream()
+						streamExtractorLazy.await().audioStreams.maxByOrNull { it.bitrate }
+							?: throw FailedFindingAudioStream()
 					if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
 					val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content))
@@ -590,9 +596,7 @@ class Playlist(
 		}
 	}
 
-	suspend fun writeToM3u(path: Path?) = withContext(Dispatchers.IO) {
-		val path = path ?: folder.resolve("$name.m3u")
-
+	suspend fun writeToM3u(path: Path) = withContext(Dispatchers.IO) {
 		val bufferedWriter = path.toFile().bufferedWriter()
 		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().executeAsList()
 
@@ -604,6 +608,10 @@ class Playlist(
 				it.write("${track.audio_path}\n")
 			}
 		}
+	}
+
+	suspend fun hasTrackInDatabase(videoId: String) = withContext(Dispatchers.IO) {
+		database.trackQueries.exists(videoId = videoId).executeAsOne()
 	}
 
 	companion object {

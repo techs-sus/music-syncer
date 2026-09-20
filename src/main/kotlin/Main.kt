@@ -1,18 +1,33 @@
 package com.github.techs_sus
 
 import com.github.ajalt.clikt.command.SuspendingCliktCommand
+import com.github.ajalt.clikt.command.SuspendingNoOpCliktCommand
 import com.github.ajalt.clikt.command.main
 import com.github.ajalt.clikt.core.Context
 import com.github.ajalt.clikt.core.obj
+import com.github.ajalt.clikt.core.registerJvmCloseable
 import com.github.ajalt.clikt.core.requireObject
 import com.github.ajalt.clikt.core.subcommands
+import com.github.ajalt.clikt.parameters.options.defaultLazy
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.path
 import com.github.ajalt.mordant.terminal.Terminal
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.stream.consumeAsFlow
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
+import java.nio.file.Files
+import kotlin.io.path.deleteIfExists
+import kotlin.io.path.extension
+import kotlin.io.path.nameWithoutExtension
+import kotlin.io.path.relativeTo
 import kotlin.system.exitProcess
 
 class InitCommand : SuspendingCliktCommand() {
@@ -76,29 +91,103 @@ class SyncCommand : SuspendingCliktCommand() {
 
 class WriteToM3uCommand : SuspendingCliktCommand() {
 	val playlist: Playlist by requireObject()
-	val m3uPath by option(help = "optional output m3u path").path(canBeDir = false)
+	val m3uPath by option(help = "optional output m3u path").path(canBeDir = false).defaultLazy {
+		playlist.folder.resolve("${playlist.name}.m3u")
+	}
 
 	override fun help(context: Context) = "Uses a database to write an M3U file"
 
 	override suspend fun run() {
 		playlist.writeToM3u(m3uPath)
+
+		val terminal = Terminal()
+		terminal.println(terminal.theme.success("Wrote an m3u playlist to \"$m3uPath\"!"))
 	}
 }
 
-object PlaylistHolder {
-	var playlist: Playlist? = null
-}
+class CleanContainer : SuspendingCliktCommand() {
+	val container by option("-c", "--container", help = "the folder containing all your playlists databases").path(
+		mustExist = true,
+		mustBeWritable = true,
+		mustBeReadable = true,
 
-class MusicSyncerKotlin : SuspendingCliktCommand() {
-	val path by option("-p", "--path", help = "sqlite database path").path(canBeDir = false).required()
+		canBeDir = true,
+		canBeFile = false,
+		canBeSymlink = false,
+	).required()
 
 	override fun help(context: Context) =
-		"Allows for the incremental fetching of playlists using a SQLite database."
+		"Cleans up all tracks and thumbnails in a container that are not present in any playlist"
+
+	override suspend fun run() {
+		withContext(Dispatchers.IO) {
+			val terminal = Terminal()
+
+			terminal.println(terminal.theme.info("Cleaning container: \"$container\""))
+
+			val playlists =
+				Files.list(container).consumeAsFlow().filter { it.extension == "db" }
+					.mapNotNull { runCatching { Playlist.createFromPath(it) }.getOrNull() }.toList()
+
+			playlists.forEach {
+				terminal.println(terminal.theme.info("Found valid playlist in container named \"${it.name}\""))
+			}
+
+			val files = merge(
+				Files.list(container.resolve("audio")).consumeAsFlow()
+					.filter { it.extension == knownFinalAudioExtension },
+
+				Files.list(container.resolve("thumbnail")).consumeAsFlow()
+					.filter { it.extension == knownFinalThumbnailExtension }
+			)
+				.toList().groupBy {
+					it.nameWithoutExtension
+				}
+				// we want orphaned tracks
+				.filter { (videoId) ->
+					playlists.none { playlist ->
+						playlist.hasTrackInDatabase(videoId)
+					}
+				}
+
+
+			files.forEach { (id, paths) ->
+				run {
+					terminal.println(
+						terminal.theme.danger(
+							"orphan \"$id\" no longer has paths: ${
+								paths.map {
+									it.relativeTo(
+										container
+									)
+								}
+							}"
+						)
+					)
+
+					paths.forEach { it.deleteIfExists() }
+				}
+			}
+
+			terminal.println(terminal.theme.success("Cleaned container!"))
+		}
+	}
+}
+
+class MusicSyncerKotlin : SuspendingNoOpCliktCommand() {
+	override fun help(context: Context) =
+		"Locally sync and manage YouTube Music playlists quickly and easily"
+}
+
+class PlaylistCommand : SuspendingCliktCommand() {
+	val path by option("-p", "--path", help = "required sqlite database path").path(canBeDir = false).required()
+
+	override fun help(context: Context) =
+		"Manage an incrementally fetched playlist with its SQLite database"
 
 	override suspend fun run() {
 		val playlist = Playlist.createFromPath(path)
-		PlaylistHolder.playlist = playlist
-		currentContext.obj = playlist
+		currentContext.obj = currentContext.registerJvmCloseable(playlist)
 	}
 }
 
@@ -107,9 +196,12 @@ suspend fun main(args: Array<String>) {
 	NewPipe.init(downloader, Localization("en", "US"))
 
 	try {
-		MusicSyncerKotlin().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()).main(args)
+		MusicSyncerKotlin().subcommands(
+			PlaylistCommand().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()),
+			CleanContainer()
+		)
+			.main(args)
 	} finally {
-		PlaylistHolder.playlist?.close()
 		DownloaderImpl.closeInstance()
 	}
 }
