@@ -12,6 +12,8 @@ scrimage = "4.6.7"
 mordant = "3.1.0"
 slf4j = "2.0.19"
 
+graalvmNative = "1.1.13"
+
 [libraries]
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
@@ -33,3 +35,4 @@ slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 
 [plugins]
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvmNative" }

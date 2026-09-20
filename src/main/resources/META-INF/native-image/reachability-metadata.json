@@ -1,0 +1,843 @@
+{
+  "reflection": [
+    {
+      "type": "boolean[]",
+      "jniAccessible": true
+    },
+    {
+      "type": "com.github.ajalt.mordant.terminal.terminalinterface.ffm.TerminalInterfaceProviderFfm"
+    },
+    {
+      "type": "com.github.ajalt.mordant.terminal.terminalinterface.jna.TerminalInterfaceProviderJna"
+    },
+    {
+      "type": "com.github.ajalt.mordant.terminal.terminalinterface.nativeimage.TerminalInterfaceProviderNativeImage"
+    },
+    {
+      "type": "com.google.protobuf.DescriptorMessageInfoFactory"
+    },
+    {
+      "type": "com.google.protobuf.GeneratedMessage"
+    },
+    {
+      "type": "com.google.protobuf.ListFieldSchemaFull"
+    },
+    {
+      "type": "com.google.protobuf.MapFieldSchemaFull"
+    },
+    {
+      "type": "com.google.protobuf.NewInstanceSchemaFull"
+    },
+    {
+      "type": "com.google.protobuf.UnknownFieldSetSchema"
+    },
+    {
+      "type": "com.sun.crypto.provider.AESCipher$General",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ARCFOURCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ChaCha20Cipher$ChaCha20Poly1305",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESedeCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DHParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.GaloisCounterMode$AESGCM",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HKDFKeyDerivation$HKDFSHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "javax.crypto.KDFParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacCore$HmacSHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.TlsMasterSecretGenerator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Boolean",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getBoolean",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Throwable",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "toString",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.nio.Buffer",
+      "fields": [
+        {
+          "name": "address"
+        }
+      ]
+    },
+    {
+      "type": "java.security.AlgorithmParametersSpi"
+    },
+    {
+      "type": "java.security.KeyStoreSpi"
+    },
+    {
+      "type": "java.security.interfaces.ECPrivateKey"
+    },
+    {
+      "type": "java.security.interfaces.ECPublicKey"
+    },
+    {
+      "type": "java.security.interfaces.RSAPrivateKey"
+    },
+    {
+      "type": "java.security.interfaces.RSAPublicKey"
+    },
+    {
+      "type": "kotlin.SafePublicationLazyImpl"
+    },
+    {
+      "type": "kotlin.reflect.jvm.internal.ReflectionFactoryImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.CancellableContinuationImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.DispatchedCoroutine"
+    },
+    {
+      "type": "kotlinx.coroutines.EventLoopImplBase"
+    },
+    {
+      "type": "kotlinx.coroutines.JobSupport"
+    },
+    {
+      "type": "kotlinx.coroutines.JobSupport$Finishing"
+    },
+    {
+      "type": "kotlinx.coroutines.channels.BufferedChannel"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.ConcurrentLinkedListNode"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.DispatchedContinuation"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LimitedDispatcher"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeLinkedListNode"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeTaskQueue"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.LockFreeTaskQueueCore"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.Segment"
+    },
+    {
+      "type": "kotlinx.coroutines.internal.ThreadSafeHeap"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.CoroutineScheduler"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.CoroutineScheduler$Worker"
+    },
+    {
+      "type": "kotlinx.coroutines.scheduling.WorkQueue"
+    },
+    {
+      "type": "kotlinx.coroutines.sync.MutexImpl"
+    },
+    {
+      "type": "kotlinx.coroutines.sync.SemaphoreAndMutexImpl"
+    },
+    {
+      "type": "libcore.io.Memory"
+    },
+    {
+      "type": "okhttp3.internal.connection.RealCall"
+    },
+    {
+      "type": "org.robolectric.Robolectric"
+    },
+    {
+      "type": "org.schabi.newpipe.extractor.services.youtube.protos.playlist.PlaylistProtobufContinuation$ContinuationParams",
+      "fields": [
+        {
+          "name": "browseId_"
+        },
+        {
+          "name": "continuationProperties_"
+        },
+        {
+          "name": "playlistId_"
+        }
+      ]
+    },
+    {
+      "type": "org.schabi.newpipe.extractor.services.youtube.protos.playlist.PlaylistProtobufContinuation$PlaylistContinuation",
+      "fields": [
+        {
+          "name": "bitField0_"
+        },
+        {
+          "name": "parameters_"
+        }
+      ]
+    },
+    {
+      "type": "org.slf4j.Logger"
+    },
+    {
+      "type": "org.slf4j.nop.NOPServiceProvider"
+    },
+    {
+      "type": "org.sqlite.BusyHandler",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "callback",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.Collation",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "xCompare",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.Function",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "args"
+        },
+        {
+          "name": "context"
+        },
+        {
+          "name": "value"
+        }
+      ],
+      "methods": [
+        {
+          "name": "xFunc",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.Function$Aggregate",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "clone",
+          "parameterTypes": []
+        },
+        {
+          "name": "xFinal",
+          "parameterTypes": []
+        },
+        {
+          "name": "xStep",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.Function$Window",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "xInverse",
+          "parameterTypes": []
+        },
+        {
+          "name": "xValue",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.JDBC"
+    },
+    {
+      "type": "org.sqlite.ProgressHandler",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "progress",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.core.DB",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "onCommit",
+          "parameterTypes": [
+            "boolean"
+          ]
+        },
+        {
+          "name": "onUpdate",
+          "parameterTypes": [
+            "int",
+            "java.lang.String",
+            "java.lang.String",
+            "long"
+          ]
+        },
+        {
+          "name": "throwex",
+          "parameterTypes": []
+        },
+        {
+          "name": "throwex",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.core.DB$ProgressObserver",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "progress",
+          "parameterTypes": [
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.sqlite.core.NativeDB",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "busyHandler"
+        },
+        {
+          "name": "commitListener"
+        },
+        {
+          "name": "pointer"
+        },
+        {
+          "name": "progressHandler"
+        },
+        {
+          "name": "updateListener"
+        }
+      ],
+      "methods": [
+        {
+          "name": "stringToUtf8ByteArray",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "throwex",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.misc.Unsafe",
+      "fields": [
+        {
+          "name": "theUnsafe"
+        }
+      ]
+    },
+    {
+      "type": "sun.net.www.protocol.http.Handler",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.net.www.protocol.https.Handler",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore$DualFormatPKCS12",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA224withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA256withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.NativePRNG",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.security.SecureRandomParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA224",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA5$SHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA5$SHA512",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.X509Factory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.certpath.PKIXCertPathValidator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.PSSParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAKeyFactory$Legacy",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAPSSSignature",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA224withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA256withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.SSLContextImpl$TLSContext",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.TrustManagerFactoryImpl$PKIXFactory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.AuthorityInfoAccessExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.AuthorityKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.BasicConstraintsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CRLDistributionPointsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CertificatePoliciesExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.ExtendedKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.KeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.NetscapeCertTypeExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.PrivateKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.SubjectAlternativeNameExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.SubjectKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.text.resources.cldr.FormatData"
+    },
+    {
+      "type": "sun.text.resources.cldr.FormatData_en"
+    },
+    {
+      "type": "sun.text.resources.cldr.FormatData_en_US"
+    },
+    {
+      "type": "sun.util.resources.cldr.CalendarData"
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/maven/org.xerial/sqlite-jdbc/pom.properties"
+    },
+    {
+      "glob": "META-INF/services/com.github.ajalt.mordant.terminal.TerminalInterfaceProvider"
+    },
+    {
+      "glob": "META-INF/services/java.net.spi.InetAddressResolverProvider"
+    },
+    {
+      "glob": "META-INF/services/java.net.spi.URLStreamHandlerProvider"
+    },
+    {
+      "glob": "META-INF/services/java.sql.Driver"
+    },
+    {
+      "glob": "META-INF/services/java.time.zone.ZoneRulesProvider"
+    },
+    {
+      "glob": "META-INF/services/org.slf4j.spi.SLF4JServiceProvider"
+    },
+    {
+      "glob": "org/sqlite/native/Linux/x86_64/libsqlitejdbc.so"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/nfc.nrm"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/nfkc.nrm"
+    },
+    {
+      "module": "java.base",
+      "glob": "jdk/internal/icu/impl/data/icudt76b/uprops.icu"
+    },
+    {
+      "module": "java.base",
+      "glob": "sun/net/idn/uidna.spp"
+    }
+  ],
+  "foreign": {
+    "downcalls": [
+      {
+        "returnType": "jint",
+        "parameterTypes": [
+          "jint"
+        ]
+      }
+    ]
+  }
+}

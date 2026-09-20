@@ -1,14 +1,15 @@
 {
   lib,
-  jdk25,
+  java,
   gradle,
   buildGradleApplication,
   ffmpeg,
+  ...
 }:
 (buildGradleApplication {
   pname = "music-syncer-kotlin";
   version = "git";
-  jdk = jdk25;
+  jdk = java;
 
   inherit gradle;
 
@@ -35,6 +36,8 @@
     "https://jitpack.io"
   ];
 
+  buildTask = ":nativeCompile";
+
   meta = with lib; {
     description = "lightweight music player";
     homepage = "https://github.com/techs-sus/music-syncer";
@@ -51,6 +54,12 @@
   };
 }).overrideAttrs
   (old: {
+    installPhase = ''
+      install -Dm755 \
+      	build/native/nativeCompile/music-syncer-kotlin \
+      		$out/bin/music-syncer-kotlin
+    '';
+
     postFixup = old.postFixup + ''
       wrapProgram $out/bin/music-syncer-kotlin --prefix PATH : "${lib.getBin ffmpeg}/bin"
     '';

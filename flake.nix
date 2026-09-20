@@ -17,12 +17,17 @@
       perSystem =
         { system, pkgs, ... }:
         let
+          java = pkgs.graalvmPackages.graalvm-ce;
+
           gradle = pkgs.gradleFromWrapper {
             wrapperPropertiesPath = ./gradle/wrapper/gradle-wrapper.properties;
-            defaultJava = pkgs.jdk25;
+            defaultJava = java;
           };
 
-          package = pkgs.callPackage ./package.nix { inherit gradle; };
+          package = pkgs.callPackage ./package.nix {
+            inherit gradle;
+            inherit java;
+          };
         in
         {
           _module.args.pkgs = import inputs.nixpkgs {
@@ -37,13 +42,15 @@
 
             pkgs.mkShell {
               packages = with pkgs; [
-                jdk25
+                java
                 gradle
                 kotlin
                 ffmpeg
 
                 package.updateVerificationMetadata
               ];
+
+              JAVA_HOME = "${java}";
             };
 
           packages.default = package;
