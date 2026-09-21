@@ -8,7 +8,7 @@ import java.nio.file.Path
 import kotlin.io.path.createDirectory
 
 suspend fun main() {
-	val downloader = DownloaderImpl.init(OkHttpClient.Builder())
+	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 
 	val temporaryFolder = Path.of(SystemTemporaryDirectory.toString(), "music-syncer-kotlin-native-agent")
@@ -17,7 +17,7 @@ suspend fun main() {
 		temporaryFolder.createDirectory()
 	}
 
-	Playlist.createFromPath(temporaryFolder.resolve("test.db")).use {
+	Playlist.createFromDatabasePath(temporaryFolder.resolve("test.db")).use {
 		// PLGH9mkC270ac is guaranteed to only have 1 song
 		it.setYoutubeUpstream("PLGH9mkC270ac").await()
 		it.syncFromUpstream()

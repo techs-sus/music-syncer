@@ -20,7 +20,7 @@ import java.util.function.Consumer
 import java.util.stream.Collectors
 import java.util.stream.Stream
 
-class DownloaderImpl(builder: OkHttpClient.Builder) : Downloader(), Closeable {
+class PipeDownloaderImpl(builder: OkHttpClient.Builder) : Downloader(), Closeable {
 	private val mCookies: MutableMap<String?, String?> = HashMap()
 
 	val client: OkHttpClient = builder
@@ -124,12 +124,12 @@ class DownloaderImpl(builder: OkHttpClient.Builder) : Downloader(), Closeable {
 			requestBuilder.addHeader("Cookie", cookies)
 		}
 
-		headers.forEach { (headerName: String?, headerValueList: MutableList<String?>?) ->
-			requestBuilder.removeHeader(headerName!!)
-			headerValueList!!.forEach(Consumer { headerValue: String? ->
+		headers.forEach { (headerName, headerValueList) ->
+			requestBuilder.removeHeader(headerName)
+			headerValueList.forEach(Consumer { headerValue: String ->
 				requestBuilder.addHeader(
 					headerName,
-					headerValue!!
+					headerValue
 				)
 			})
 		}
@@ -165,22 +165,22 @@ class DownloaderImpl(builder: OkHttpClient.Builder) : Downloader(), Closeable {
 		const val YOUTUBE_RESTRICTED_MODE_COOKIE: String = "PREF=f2=8000000"
 		const val YOUTUBE_DOMAIN: String = "youtube.com"
 
-		private var instance: DownloaderImpl? = null
+		private var instance: PipeDownloaderImpl? = null
 
 		/**
 		 * It's recommended to call exactly once in the entire lifetime of the application.
 		 *
 		 * @param builder if null, default builder will be used
-		 * @return a new instance of [DownloaderImpl]
+		 * @return a new instance of [PipeDownloaderImpl]
 		 */
-		fun init(builder: OkHttpClient.Builder?): DownloaderImpl {
-			instance = DownloaderImpl(
+		fun init(builder: OkHttpClient.Builder?): PipeDownloaderImpl {
+			instance = PipeDownloaderImpl(
 				builder ?: OkHttpClient.Builder()
 			)
 			return instance!!
 		}
 
-		fun getInstance(): DownloaderImpl {
+		fun getInstance(): PipeDownloaderImpl {
 			return instance!!
 		}
 

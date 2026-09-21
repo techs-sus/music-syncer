@@ -15,8 +15,6 @@ import com.github.ajalt.mordant.widgets.progress.progressBarContextLayout
 import com.github.ajalt.mordant.widgets.progress.spinner
 import com.github.ajalt.mordant.widgets.progress.text
 import com.github.ajalt.mordant.widgets.progress.timeElapsed
-import com.sksamuel.scrimage.ImmutableImage
-import com.sksamuel.scrimage.nio.PngWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -34,24 +32,18 @@ import okhttp3.Gzip
 import okhttp3.OkHttpClient
 import okhttp3.brotli.Brotli
 import okhttp3.coroutines.executeAsync
-import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
-import org.jaudiotagger.tag.images.StandardArtwork
 import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
-import org.schabi.newpipe.extractor.stream.StreamExtractor
+import java.io.BufferedWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.Collections.emptyList
 import java.util.Properties
-import kotlin.io.path.deleteExisting
-import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
-import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
 import kotlin.io.path.relativeTo
 
@@ -62,11 +54,11 @@ sealed class ProjectException(val string: String) : Exception(string)
 class DatabaseIsNotOurs : ProjectException("database is not ours")
 class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
 class FailedFindingThumbnail : ProjectException("failed finding thumbnail")
-class FailedDecodingMime : ProjectException("failed decoding mime type")
+class FailedDecodingMime(mime: String) : ProjectException("failed decoding mime type: $mime")
 class NoContentTypeHeader : ProjectException("there was no content type header")
 class FailedFindingAudioStream : ProjectException("failed finding audio stream")
-class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
 class FailedDownloadingFromUrl : ProjectException("failed downloading from url")
+class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
 
 fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	return iterator {
@@ -98,6 +90,8 @@ sealed class TrackStatus(val title: String, val currentPosition: Int) {
 const val knownFinalAudioExtension = "m4a"
 const val knownFinalThumbnailExtension = "png"
 
+private const val maximumSyncConcurrency = 8
+
 class Playlist(
 	private val service: YoutubeService = ServiceList.YouTube,
 	private val http: OkHttpClient = OkHttpClient().newBuilder().addInterceptor(
@@ -122,6 +116,59 @@ class Playlist(
 
 	private val audioFolder = folder.resolve("audio")
 	private val thumbnailFolder = folder.resolve("thumbnail")
+
+	companion object {
+		suspend fun createFromDatabasePath(path: Path): Playlist {
+			val (database, driver) = createDatabaseFromPath(path)
+			val playlist = Playlist(
+				database = database, driver = driver, name = path.nameWithoutExtension, folder = path.parent
+			)
+
+			withContext(Dispatchers.IO) {
+				runCatching { Files.createDirectory(playlist.thumbnailFolder) }
+				runCatching { Files.createDirectory(playlist.audioFolder) }
+			}
+
+			return playlist
+		}
+
+		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, SqlDriver> {
+			val path = path.toAbsolutePath().normalize()
+
+			// this runs our migrations for us
+			val driver: SqlDriver = JdbcSqliteDriver(
+				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
+			)
+
+			val applicationId =
+				driver.executeQuery(
+					null,
+					"PRAGMA application_id;",
+					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
+					0
+				).await()
+
+			when (applicationId) {
+				null, 0L -> {
+					// mark it as our own, get back the application_id
+					driver.execute(
+						null,
+						"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
+						parameters = 0,
+					).await()
+				}
+
+				SQLITE_APPLICATION_ID -> {
+					// already ours
+				}
+
+				// not ours
+				else -> throw DatabaseIsNotOurs()
+			}
+
+			return Pair(Database(driver), driver)
+		}
+	}
 
 	private data class LocalTrackInfo(
 		val thumbnailPath: Path?,
@@ -153,7 +200,7 @@ class Playlist(
 		)
 	}
 
-	suspend fun isValidPlaylist(upstreamPlaylistId: String): Boolean = withContext(Dispatchers.IO) {
+	suspend fun isUpstreamPlaylistIdValid(upstreamPlaylistId: String): Boolean = withContext(Dispatchers.IO) {
 		val extractor = service.getPlaylistExtractor(upstreamPlaylistId, emptyList(), "")
 
 		extractor.fetchPage()
@@ -167,15 +214,32 @@ class Playlist(
 		database.playlistMetadataQueries.setUpstreamPlaylistId(youtube_playlist_id = upstreamPlaylistId)
 	}
 
-	private suspend fun downloadFromUrl(
+	suspend fun hasTrackInDatabase(videoId: String) = withContext(Dispatchers.IO) {
+		database.trackQueries.exists(videoId = videoId).executeAsOne()
+	}
+
+	suspend fun emitM3U8Playlist(bufferedWriter: BufferedWriter) = withContext(Dispatchers.IO) {
+		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().executeAsList()
+
+		bufferedWriter.use {
+			it.write("#EXTM3U\n")
+
+			query.forEach { track ->
+				it.write("#EXTINF:${track.duration ?: 0},${track.title}\n")
+				it.write("${track.audio_path}\n")
+			}
+		}
+	}
+
+	private suspend fun downloadToDynamicPath(
 		url: String,
-		outputPathForContentType: (contentType: String) -> Path,
+		mapContentTypeToDestination: (contentType: String) -> Path,
 
 		addSpecialRangeHeader: Boolean = false
 	): Path = withContext(Dispatchers.IO) {
 		var request = okhttp3.Request.Builder()
 			.url(url)
-			.header("User-Agent", DownloaderImpl.USER_AGENT)
+			.header("User-Agent", PipeDownloaderImpl.USER_AGENT)
 			.header("Referer", "https://music.youtube.com/")
 
 		var destination: Path
@@ -187,7 +251,7 @@ class Playlist(
 
 			val contentType = response.header("content-type") ?: throw NoContentTypeHeader()
 
-			destination = outputPathForContentType(contentType)
+			destination = mapContentTypeToDestination(contentType)
 
 			response.body.byteStream().use { input ->
 				Files.newOutputStream(
@@ -203,109 +267,33 @@ class Playlist(
 	}
 
 	// Returns the path that the thumbnail was downloaded to.
-	private suspend fun syncSingleTrackThumbnail(id: String, url: String): Path =
-		downloadFromUrl(url, {
+	private suspend fun downloadTrackThumbnail(id: String, url: String): Path =
+		downloadToDynamicPath(url, {
 			val fileExtension = when (it) {
 				"image/png" -> "png"
 				"image/jpeg" -> "jpg"
 				"image/webp" -> "webp"
 
-				else -> throw FailedDecodingMime()
+				else -> throw FailedDecodingMime(it)
 			}
 
 			thumbnailFolder.resolve("$id.$fileExtension")
 		})
 
 	// Returns the path that the audio was downloaded to.
-	private suspend fun syncSingleTrackAudio(id: String, url: String): Path =
-		downloadFromUrl(url, {
+	private suspend fun downloadTrackAudio(id: String, url: String): Path =
+		downloadToDynamicPath(url, {
 			val fileExtension = when (it) {
 				"audio/webm" -> "webm"
 				"audio/mp4" -> "m4a"
 
-				else -> throw FailedDecodingMime()
+				else -> throw FailedDecodingMime(it)
 			}
 
 			audioFolder.resolve("$id.$fileExtension")
 		}, addSpecialRangeHeader = true)
 
-
-	private suspend fun ensureAudioIsTaggable(inputFile: Path): Path =
-		withContext(Dispatchers.IO) {
-			// already taggable, avoid invoking FFmpeg and deleting the file
-			if (inputFile.extension.equals(knownFinalAudioExtension, ignoreCase = true)) {
-				return@withContext inputFile
-			}
-
-			val outputFile = inputFile.resolveSibling(
-				"${inputFile.nameWithoutExtension}.$knownFinalAudioExtension"
-			)
-
-			val process = try {
-				ProcessBuilder(
-					"ffmpeg",
-					"-y",
-					"-i",
-					inputFile.toString(),
-					outputFile.toString()
-				)
-					.redirectErrorStream(false)
-					.start()
-			} catch (e: IOException) {
-				throw FailedToRemuxAsM4a(e)
-			}
-
-			val stderr = process.errorStream.bufferedReader().use { it.readText() }
-			val exitCode = process.waitFor()
-
-			if (exitCode != 0) {
-				throw FailedToRemuxAsM4a(
-					IOException(stderr.ifBlank { "FFmpeg exited with code $exitCode" })
-				)
-			}
-
-			// no need to keep the webm around
-			inputFile.deleteExisting()
-
-			outputFile
-		}
-
-	private suspend fun ensureThumbnailIsUsableInTag(inputFile: Path): Path = withContext(Dispatchers.IO) {
-		if (inputFile.extension == knownFinalThumbnailExtension) return@withContext inputFile
-
-		val image = ImmutableImage.loader().fromPath(inputFile)
-		val outputPath = image.output(
-			// this is lossless compression
-			PngWriter.MaxCompression,
-			thumbnailFolder.resolve("${inputFile.nameWithoutExtension}.$knownFinalThumbnailExtension")
-		)
-
-		inputFile.deleteIfExists()
-
-		return@withContext outputPath
-	}
-
-	private suspend fun tagAudio(audioPath: Path, thumbnailPath: Path?, extractor: StreamExtractor) =
-		withContext(Dispatchers.IO) {
-			val audioFile = AudioFileIO.read(audioPath.toFile())
-			val tag = audioFile.tagAndConvertOrCreateAndSetDefault
-
-			// add the thumbnail if it exists
-			if (thumbnailPath != null) {
-				val artwork = StandardArtwork.createArtworkFromFile(thumbnailPath.toFile())
-
-				tag.setField(artwork)
-			}
-
-			tag.setField(FieldKey.TITLE, extractor.name)
-			tag.setField(FieldKey.ARTIST, extractor.uploaderName)
-			tag.setField(FieldKey.YEAR, extractor.uploadDate?.offsetDateTime()?.year.toString())
-
-			// writes the tag to disk
-			audioFile.commit()
-		}
-
-	private suspend fun syncSingleTrackFromUpstream(
+	private suspend fun syncTrackFromUpstream(
 		id: String,
 
 		playlistStreamItem: PlaylistStreamItem,
@@ -318,7 +306,7 @@ class Playlist(
 				async(Dispatchers.IO) {
 					val extractor = service.getStreamExtractor(service.streamLHFactory.fromId(id))
 					extractor.fetchPage()
-					return@async extractor
+					extractor
 				}
 			}
 
@@ -333,8 +321,8 @@ class Playlist(
 					?: throw FailedFindingThumbnail()
 
 				runCatching {
-					ensureThumbnailIsUsableInTag(
-						syncSingleTrackThumbnail(
+					Tagging.ensureThumbnailIsUsableInTag(
+						downloadTrackThumbnail(
 							id = id,
 							url = bestThumbnail.url
 						)
@@ -350,7 +338,7 @@ class Playlist(
 						// and if the track is already downloaded, but stream is unavailable, then the db call would be skipped
 						if (existingTrackFiles.thumbnailPath == null) {
 							runCatching {
-								tagAudio(
+								Tagging.tagAudio(
 									audioPath = existingTrackFiles.audioPath,
 									thumbnailPath = thumbnailPathLazy.await(),
 									extractor = streamExtractorLazy.await()
@@ -367,8 +355,8 @@ class Playlist(
 							?: throw FailedFindingAudioStream()
 					if (!bestAudioStream.isUrl) throw FailedFindingAudioStream()
 
-					val audioPath = ensureAudioIsTaggable(syncSingleTrackAudio(id = id, url = bestAudioStream.content))
-					tagAudio(
+					val audioPath = Tagging.ensureAudioIsTaggable(downloadTrackAudio(id = id, url = bestAudioStream.content))
+					Tagging.tagAudio(
 						audioPath = audioPath,
 						thumbnailPath = thumbnailPathLazy.await(),
 						extractor = streamExtractorLazy.await()
@@ -509,7 +497,7 @@ class Playlist(
 			}
 
 			launch {
-				val semaphore = Semaphore(8)
+				val semaphore = Semaphore(maximumSyncConcurrency)
 
 				// always call sync on tracks in the upstream
 				// why? audio_path and/or thumbnail_path may have been deleted
@@ -521,7 +509,7 @@ class Playlist(
 								val task = progressMutex.withLock { progress.addTask(taskLayout, context = stream.title, total = 1) }
 
 								runCatching {
-									syncSingleTrackFromUpstream(
+									syncTrackFromUpstream(
 										id = id,
 
 										playlistStreamItem = stream,
@@ -549,7 +537,7 @@ class Playlist(
 		}
 
 		// after this call everything is guaranteed to be finished
-		val list = statusFlow.toList().sortedBy { it.currentPosition }
+		val sortedTrackStatuses = statusFlow.toList().sortedBy { it.currentPosition }
 
 		// don't leave any leftovers
 		database.incomingTrackQueries.clear()
@@ -565,7 +553,7 @@ class Playlist(
 			progress.stop()
 		}
 
-		list.forEach {
+		sortedTrackStatuses.forEach {
 			when (it) {
 				is TrackStatus.Added -> terminal.println(
 					terminal.theme.success(
@@ -593,78 +581,4 @@ class Playlist(
 			}
 		}
 	}
-
-	suspend fun writeToM3u(path: Path) = withContext(Dispatchers.IO) {
-		val bufferedWriter = path.toFile().bufferedWriter()
-		val query = database.trackQueries.getPathAndDurationAndTitlesAscending().executeAsList()
-
-		bufferedWriter.use {
-			it.write("#EXTM3U\n")
-
-			query.forEach { track ->
-				it.write("#EXTINF:${track.duration ?: 0},${track.title}\n")
-				it.write("${track.audio_path}\n")
-			}
-		}
-	}
-
-	suspend fun hasTrackInDatabase(videoId: String) = withContext(Dispatchers.IO) {
-		database.trackQueries.exists(videoId = videoId).executeAsOne()
-	}
-
-	companion object {
-		suspend fun createFromPath(path: Path): Playlist {
-			val (database, driver) = createDatabaseFromPath(path)
-			val playlist = Playlist(
-				database = database, driver = driver, name = path.nameWithoutExtension, folder = path.parent
-			)
-
-			withContext(Dispatchers.IO) {
-				runCatching { Files.createDirectory(playlist.thumbnailFolder) }
-				runCatching { Files.createDirectory(playlist.audioFolder) }
-			}
-
-			return playlist
-		}
-
-		private suspend fun createDatabaseFromPath(path: Path): Pair<Database, SqlDriver> {
-			val path = path.toAbsolutePath().normalize()
-
-			// this runs our migrations for us
-			val driver: SqlDriver = JdbcSqliteDriver(
-				"jdbc:sqlite:file:$path?mode=rwc", Properties(), Database.Schema
-			)
-
-			val applicationId =
-				driver.executeQuery(
-					null,
-					"PRAGMA application_id;",
-					mapper = { cursor -> QueryResult.Value(cursor.getLong(0)) },
-					0
-				).await()
-
-			when (applicationId) {
-				null, 0L -> {
-					// mark it as our own, get back the application_id
-					driver.execute(
-						null,
-						"PRAGMA application_id = ${SQLITE_APPLICATION_ID};",
-						parameters = 0,
-					).await()
-				}
-
-				SQLITE_APPLICATION_ID -> {
-					// already ours
-				}
-
-				// not ours
-				else -> throw DatabaseIsNotOurs()
-			}
-
-			val database = Database(driver)
-
-			return Pair(database, driver)
-		}
-	}
 }
-

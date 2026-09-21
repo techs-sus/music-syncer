@@ -32,7 +32,7 @@ import kotlin.system.exitProcess
 
 class InitCommand : SuspendingCliktCommand() {
 	val playlist: Playlist by requireObject()
-	val upstream: String by option("-u", "--upstream", help = "upstream playlist id").required()
+	val upstreamPlaylistId: String by option("-u", "--upstream", help = "upstream playlist id").required()
 
 	override fun help(context: Context) =
 		"Initializes a database with an upstream YouTube playlist. Must be given a playlist id and not a playlist URL"
@@ -40,7 +40,7 @@ class InitCommand : SuspendingCliktCommand() {
 	override suspend fun run() {
 		val terminal = Terminal()
 
-		if (upstream.startsWith("http") || !playlist.isValidPlaylist(upstream)) {
+		if (upstreamPlaylistId.startsWith("http") || !playlist.isUpstreamPlaylistIdValid(upstreamPlaylistId)) {
 			terminal.println(terminal.theme.danger("error: invalid playlist id"))
 			terminal.println()
 			terminal.println(
@@ -72,7 +72,7 @@ class InitCommand : SuspendingCliktCommand() {
 			exitProcess(1)
 		}
 
-		playlist.setYoutubeUpstream(upstream)
+		playlist.setYoutubeUpstream(upstreamPlaylistId)
 
 		terminal.println(terminal.theme.success("successfully set playlist upstream"))
 	}
@@ -98,7 +98,7 @@ class WriteToM3uCommand : SuspendingCliktCommand() {
 	override fun help(context: Context) = "Uses a database to write an M3U file"
 
 	override suspend fun run() {
-		playlist.writeToM3u(m3uPath)
+		playlist.emitM3U8Playlist(m3uPath.toFile().bufferedWriter())
 
 		val terminal = Terminal()
 		terminal.println(terminal.theme.success("Wrote an m3u playlist to \"$m3uPath\"!"))
@@ -127,7 +127,7 @@ class CleanContainer : SuspendingCliktCommand() {
 
 			val playlists =
 				Files.list(container).consumeAsFlow().filter { it.extension == "db" }
-					.mapNotNull { runCatching { Playlist.createFromPath(it) }.getOrNull() }.toList()
+					.mapNotNull { runCatching { Playlist.createFromDatabasePath(it) }.getOrNull() }.toList()
 
 			playlists.forEach {
 				terminal.println(terminal.theme.info("Found valid playlist in container named \"${it.name}\""))
@@ -150,7 +150,6 @@ class CleanContainer : SuspendingCliktCommand() {
 					}
 				}
 
-
 			files.forEach { (id, paths) ->
 				run {
 					terminal.println(
@@ -170,6 +169,8 @@ class CleanContainer : SuspendingCliktCommand() {
 			}
 
 			terminal.println(terminal.theme.success("Cleaned container!"))
+
+			playlists.forEach { it.close() }
 		}
 	}
 }
@@ -186,13 +187,13 @@ class PlaylistCommand : SuspendingCliktCommand() {
 		"Manage an incrementally fetched playlist with its SQLite database"
 
 	override suspend fun run() {
-		val playlist = Playlist.createFromPath(path)
+		val playlist = Playlist.createFromDatabasePath(path)
 		currentContext.obj = currentContext.registerCloseable(playlist)
 	}
 }
 
 suspend fun main(args: Array<String>) {
-	val downloader = DownloaderImpl.init(OkHttpClient.Builder())
+	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 
 	try {
@@ -202,6 +203,6 @@ suspend fun main(args: Array<String>) {
 		)
 			.main(args)
 	} finally {
-		DownloaderImpl.closeInstance()
+		PipeDownloaderImpl.closeInstance()
 	}
 }
