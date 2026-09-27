@@ -88,7 +88,6 @@ dependencies {
 	implementation(libs.jaudiotagger)
 
 	implementation(libs.imageio.core)
-	implementation(libs.imageio.jpeg)
 	implementation(libs.imageio.webp)
 
 	implementation(libs.clikt)

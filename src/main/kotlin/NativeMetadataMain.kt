@@ -7,8 +7,9 @@ import org.schabi.newpipe.extractor.localization.Localization
 import java.nio.file.Path
 import javax.imageio.ImageIO
 import kotlin.io.path.createDirectory
-import kotlin.io.path.deleteIfExists
+import kotlin.io.path.deleteRecursively
 
+@OptIn(kotlin.io.path.ExperimentalPathApi::class)
 suspend fun main() {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
@@ -17,7 +18,7 @@ suspend fun main() {
 	val temporaryFolder = Path.of(SystemTemporaryDirectory.toString(), "music-syncer-kotlin-native-agent")
 
 	runCatching {
-		temporaryFolder.deleteIfExists()
+		temporaryFolder.deleteRecursively()
 	}
 
 	runCatching {

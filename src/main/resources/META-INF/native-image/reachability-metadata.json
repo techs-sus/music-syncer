@@ -106,7 +106,27 @@
       ]
     },
     {
+      "type": "com.sun.crypto.provider.HKDFKeyDerivation$HKDFSHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "javax.crypto.KDFParameters"
+          ]
+        }
+      ]
+    },
+    {
       "type": "com.sun.crypto.provider.HmacCore$HmacSHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacCore$HmacSHA384",
       "methods": [
         {
           "name": "<init>",
@@ -124,13 +144,79 @@
       ]
     },
     {
+      "type": "com.sun.imageio.plugins.jpeg.JPEGImageReader",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "acceptPixels",
+          "parameterTypes": [
+            "int",
+            "boolean"
+          ]
+        },
+        {
+          "name": "passComplete",
+          "parameterTypes": []
+        },
+        {
+          "name": "passStarted",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "pushBack",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "readInputData",
+          "parameterTypes": [
+            "byte[]",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setImageData",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "byte[]"
+          ]
+        },
+        {
+          "name": "skipInputBytes",
+          "parameterTypes": [
+            "long"
+          ]
+        },
+        {
+          "name": "skipPastImage",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "warningOccurred",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "warningWithMessage",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
       "type": "com.twelvemonkeys.imageio.color.ProfileDeferralActivator$Spi"
-    },
-    {
-      "type": "com.twelvemonkeys.imageio.plugins.jpeg.JPEGImageReaderSpi"
-    },
-    {
-      "type": "com.twelvemonkeys.imageio.plugins.jpeg.JPEGImageWriterSpi"
     },
     {
       "type": "com.twelvemonkeys.imageio.plugins.webp.WebPImageReaderSpi"
@@ -155,7 +241,174 @@
       ]
     },
     {
+      "type": "java.awt.image.BufferedImage",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "colorModel"
+        },
+        {
+          "name": "imageType"
+        },
+        {
+          "name": "raster"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getRGB",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "int",
+            "int"
+          ]
+        },
+        {
+          "name": "setRGB",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "int",
+            "int"
+          ]
+        }
+      ]
+    },
+    {
       "type": "java.awt.image.ColorConvertOp"
+    },
+    {
+      "type": "java.awt.image.ColorModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "colorSpace"
+        },
+        {
+          "name": "colorSpaceType"
+        },
+        {
+          "name": "isAlphaPremultiplied"
+        },
+        {
+          "name": "is_sRGB"
+        },
+        {
+          "name": "nBits"
+        },
+        {
+          "name": "numComponents"
+        },
+        {
+          "name": "supportsAlpha"
+        },
+        {
+          "name": "transparency"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getRGBdefault",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.Raster",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "dataBuffer"
+        },
+        {
+          "name": "height"
+        },
+        {
+          "name": "minX"
+        },
+        {
+          "name": "minY"
+        },
+        {
+          "name": "numBands"
+        },
+        {
+          "name": "numDataElements"
+        },
+        {
+          "name": "sampleModel"
+        },
+        {
+          "name": "sampleModelTranslateX"
+        },
+        {
+          "name": "sampleModelTranslateY"
+        },
+        {
+          "name": "width"
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.SampleModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "height"
+        },
+        {
+          "name": "width"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getPixels",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "java.awt.image.DataBuffer"
+          ]
+        },
+        {
+          "name": "setPixels",
+          "parameterTypes": [
+            "int",
+            "int",
+            "int",
+            "int",
+            "int[]",
+            "java.awt.image.DataBuffer"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.awt.image.SinglePixelPackedSampleModel",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "bitMasks"
+        },
+        {
+          "name": "bitOffsets"
+        },
+        {
+          "name": "bitSizes"
+        },
+        {
+          "name": "maxBitSize"
+        }
+      ]
     },
     {
       "type": "java.lang.Boolean",
@@ -216,6 +469,27 @@
     },
     {
       "type": "java.security.interfaces.RSAPublicKey"
+    },
+    {
+      "type": "javax.imageio.plugins.jpeg.JPEGHuffmanTable",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "lengths"
+        },
+        {
+          "name": "values"
+        }
+      ]
+    },
+    {
+      "type": "javax.imageio.plugins.jpeg.JPEGQTable",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "qTable"
+        }
+      ]
     },
     {
       "type": "javax.imageio.spi.ImageReaderSpi"
@@ -291,6 +565,448 @@
     },
     {
       "type": "okhttp3.internal.connection.RealCall"
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.ContentBrandingReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.ContentDescriptionReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.EncodingChunkReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.EncryptionChunkReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.FileHeaderReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.LanguageListReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.MetadataReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.StreamBitratePropertiesReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jaudiotagger.audio.asf.io.StreamChunkReader",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.AudioSampleEntry",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.AudioSampleEntry[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.Box$LeafBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.ChunkOffsets64Box[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.ChunkOffsetsBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.ChunkOffsetsBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.DataBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.DataInfoBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.DataInfoBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.DataRefBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.DataRefBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.EditListBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.EsdsBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.EsdsBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.FileTypeBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.HandlerBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.HandlerBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.IListBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.IListBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MdtaBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaHeaderBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaHeaderBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaInfoBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MediaInfoBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MetaBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MovieBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MovieExtendsBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MovieHeaderBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.MovieHeaderBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.NodeBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.NodeBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleDescriptionBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleDescriptionBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleEntry[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleSizesBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleSizesBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleToChunkBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SampleToChunkBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SoundMediaHeaderBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.SoundMediaHeaderBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.TimeToSampleBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.TimeToSampleBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.TrackHeaderBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.TrakBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.TrakBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.UdtaBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.UdtaBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.UdtaMetaBox[]"
+    },
+    {
+      "type": "org.jcodec.containers.mp4.boxes.UrlBox",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.jcodec.containers.mp4.boxes.Header"
+          ]
+        }
+      ]
     },
     {
       "type": "org.robolectric.Robolectric"
@@ -492,6 +1208,41 @@
           "name": "throwex",
           "parameterTypes": [
             "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.awt.image.ByteComponentRaster",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "data"
+        },
+        {
+          "name": "dataOffsets"
+        },
+        {
+          "name": "pixelStride"
+        },
+        {
+          "name": "scanlineStride"
+        },
+        {
+          "name": "type"
+        }
+      ]
+    },
+    {
+      "type": "sun.java2d.Disposer",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "addRecord",
+          "parameterTypes": [
+            "java.lang.Object",
+            "long",
+            "long"
           ]
         }
       ]
