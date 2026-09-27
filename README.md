@@ -8,7 +8,7 @@ Uses the actively maintained library
 stream urls.
 
 Demo:
-[![asciicast](https://asciinema.org/a/1UWCN2RcoYNLlGK0.svg)](https://asciinema.org/a/1UWCN2RcoYNLlGK0)
+[![asciicast](https://asciinema.org/a/pYLo3rgCTyWqVmzW.svg)](https://asciinema.org/a/pYLo3rgCTyWqVmzW)
 
 ## Usage
 
