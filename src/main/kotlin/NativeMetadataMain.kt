@@ -23,7 +23,7 @@ suspend fun main() {
 	}
 
 	Playlist.createFromDatabasePath(temporaryFolder.resolve("test.db")).use {
-		// PLGH9mkC270ac is guaranteed to only have 1 song
+		// this has webp conversion so we use it
 		it.setYoutubeUpstream("PLBNgsu_4XNgU").await()
 		it.syncFromUpstream()
 	}
