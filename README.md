@@ -55,7 +55,9 @@ Initializes a playlist at `<playlist-db-location>` and sets its upstream to
 `<upstream-youtube-playlist-id>`. You can also pass in `-u` instead of
 `--upstream`.
 
-**You must give a playlist id, and not a link.**
+**You must give a playlist id that is NOT a mix, and not a link. This tool can
+only work with FINITE playlists, because downloading an infinite playlist is
+IMPOSSIBLE.**
 
 > How do I get a playlist id?
 
@@ -79,8 +81,8 @@ present.
 > running a sync command may lead to outdated info being printed to the output
 > m3u file.
 
-Writes an m3u playlist to `<optional-m3u-path>`, defaulting to
-`{folder}/{name}.m3u` if not given. Provides the positions and human readable
+Writes a m3u playlist to `<optional-m3u-path>`, defaulting to
+`{folder}/{name}.m3u` if not given. Provides the positions and human-readable
 names of tracks for music players. Without this, your playlist will look very
 messy.
 
@@ -91,5 +93,5 @@ messy.
 Specify a container to clean with `--container` or `-c`.
 
 Deletes tracks and their thumbnails that are not present in any playlist inside
-of the container. A container is the parent of the database file. For example,
-the database file `~/Music/video/test.db` has a container of `~/Music/video`.
+the container. A container is the parent of the database file. For example, the
+database file `~/Music/video/test.db` has a container of `~/Music/video`.

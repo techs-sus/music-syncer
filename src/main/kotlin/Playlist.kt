@@ -36,6 +36,8 @@ import org.schabi.newpipe.extractor.Image
 import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.ListExtractor
 import org.schabi.newpipe.extractor.ServiceList
+import org.schabi.newpipe.extractor.playlist.PlaylistExtractor
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import org.schabi.newpipe.extractor.services.youtube.YoutubeService
 import java.io.BufferedWriter
 import java.nio.file.Files
@@ -50,6 +52,9 @@ import kotlin.io.path.relativeTo
 private const val SQLITE_APPLICATION_ID = 0x7D8A4B83L
 
 sealed class ProjectException(val string: String) : Exception(string)
+interface HumanReadableException {
+	fun print(terminal: Terminal)
+}
 
 class DatabaseIsNotOurs : ProjectException("database is not ours")
 class NoUpstreamPlaylistId : ProjectException("no upstream playlist id")
@@ -59,6 +64,16 @@ class NoContentTypeHeader : ProjectException("there was no content type header")
 class FailedFindingAudioStream : ProjectException("failed finding audio stream")
 class FailedDownloadingFromUrl : ProjectException("failed downloading from url")
 class FailedToRemuxAsM4a(exception: IOException) : ProjectException("failed to remux as m4a: $exception")
+class PlaylistIsInfinite : ProjectException("playlist is infinite"), HumanReadableException {
+	override fun print(terminal: Terminal) {
+		terminal.println(terminal.theme.danger("error: cannot sync an infinite playlist (mixes are infinite)"))
+		terminal.println(terminal.theme.danger("error: try using a finite playlist!"))
+	}
+}
+
+fun assertExtractorIsFinite(extractor: PlaylistExtractor) {
+	if (extractor.playlistType != PlaylistInfo.PlaylistType.NORMAL) throw PlaylistIsInfinite()
+}
 
 fun <T : InfoItem> ListExtractor<T>.asIterator(): Iterator<T> {
 	return iterator {
@@ -200,14 +215,15 @@ class Playlist(
 		)
 	}
 
-	suspend fun isUpstreamPlaylistIdValid(upstreamPlaylistId: String): Boolean = withContext(Dispatchers.IO) {
-		val extractor = service.getPlaylistExtractor(upstreamPlaylistId, emptyList(), "")
-
-		extractor.fetchPage()
-
+	suspend fun getExtractorForId(upstreamPlaylistId: String): PlaylistExtractor? = withContext(Dispatchers.IO) {
 		return@withContext runCatching {
+			val extractor = service.getPlaylistExtractor(upstreamPlaylistId, emptyList(), "")
+			extractor.fetchPage()
+
 			extractor.streamCount
-		}.isSuccess
+
+			extractor
+		}.getOrNull()
 	}
 
 	suspend fun setYoutubeUpstream(upstreamPlaylistId: String) = withContext(Dispatchers.IO) {
@@ -311,7 +327,10 @@ class Playlist(
 			}
 
 			val thumbnailPathLazy = async(Dispatchers.IO) {
-				if (existingTrackFiles.thumbnailPath !== null) return@async existingTrackFiles.thumbnailPath
+				// can be webp or jpg, we should always make it png
+				if (existingTrackFiles.thumbnailPath !== null) return@async Tagging.ensureThumbnailIsUsableInTag(
+					existingTrackFiles.thumbnailPath
+				)
 
 				// try using the thumbnails from the streamExtractor first
 				// else use the PlaylistStreamInfo's thumbnails
@@ -391,6 +410,8 @@ class Playlist(
 		withContext(Dispatchers.IO) {
 			extractor.fetchPage()
 		}
+
+		assertExtractorIsFinite(extractor)
 
 		val streamCount = extractor.streamCount.toInt()
 

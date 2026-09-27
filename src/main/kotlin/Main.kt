@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
+import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import java.nio.file.Files
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.extension
@@ -39,8 +40,9 @@ class InitCommand : SuspendingCliktCommand() {
 
 	override suspend fun run() {
 		val terminal = Terminal()
+		val extractor = playlist.getExtractorForId(upstreamPlaylistId)
 
-		if (upstreamPlaylistId.startsWith("http") || !playlist.isUpstreamPlaylistIdValid(upstreamPlaylistId)) {
+		if (upstreamPlaylistId.startsWith("http") || extractor == null) {
 			terminal.println(terminal.theme.danger("error: invalid playlist id"))
 			terminal.println()
 			terminal.println(
@@ -71,6 +73,8 @@ class InitCommand : SuspendingCliktCommand() {
 
 			exitProcess(1)
 		}
+
+		assertExtractorIsFinite(extractor)
 
 		playlist.setYoutubeUpstream(upstreamPlaylistId)
 
@@ -202,6 +206,12 @@ suspend fun main(args: Array<String>) {
 			CleanContainer()
 		)
 			.main(args)
+	} catch (e: Throwable) {
+		if (e is HumanReadableException) {
+			e.print(Terminal())
+		}
+
+		throw e
 	} finally {
 		PipeDownloaderImpl.closeInstance()
 	}

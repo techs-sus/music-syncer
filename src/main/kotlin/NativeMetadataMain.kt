@@ -6,6 +6,7 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
 import java.nio.file.Path
 import kotlin.io.path.createDirectory
+import kotlin.io.path.deleteIfExists
 
 suspend fun main() {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
@@ -14,12 +15,16 @@ suspend fun main() {
 	val temporaryFolder = Path.of(SystemTemporaryDirectory.toString(), "music-syncer-kotlin-native-agent")
 
 	runCatching {
+		temporaryFolder.deleteIfExists()
+	}
+
+	runCatching {
 		temporaryFolder.createDirectory()
 	}
 
 	Playlist.createFromDatabasePath(temporaryFolder.resolve("test.db")).use {
 		// PLGH9mkC270ac is guaranteed to only have 1 song
-		it.setYoutubeUpstream("PLGH9mkC270ac").await()
+		it.setYoutubeUpstream("PLBNgsu_4XNgU").await()
 		it.syncFromUpstream()
 	}
 
