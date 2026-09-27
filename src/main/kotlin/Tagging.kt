@@ -1,7 +1,5 @@
 package com.github.techs_sus
 
-import com.sksamuel.scrimage.ImmutableImage
-import com.sksamuel.scrimage.nio.PngWriter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.io.IOException
@@ -10,10 +8,14 @@ import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.images.StandardArtwork
 import org.schabi.newpipe.extractor.stream.StreamExtractor
 import java.nio.file.Path
+import javax.imageio.ImageIO
 import kotlin.io.path.deleteExisting
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
+
+// this is an ImageIO formatName
+private const val knownFinalThumbnailFormat = "PNG"
 
 object Tagging {
 	suspend fun ensureAudioIsTaggable(inputFile: Path): Path =
@@ -60,11 +62,13 @@ object Tagging {
 	suspend fun ensureThumbnailIsUsableInTag(thumbnailPath: Path): Path = withContext(Dispatchers.IO) {
 		if (thumbnailPath.extension == knownFinalThumbnailExtension) return@withContext thumbnailPath
 
-		val image = ImmutableImage.loader().fromPath(thumbnailPath)
-		val outputPath = image.output(
-			// this is lossless compression
-			PngWriter.MaxCompression,
-			thumbnailPath.resolveSibling("${thumbnailPath.nameWithoutExtension}.$knownFinalThumbnailExtension")
+		val outputPath = thumbnailPath.resolveSibling("${thumbnailPath.nameWithoutExtension}.$knownFinalThumbnailExtension")
+
+		val image = ImageIO.read(thumbnailPath.toFile())
+		ImageIO.write(
+			image,
+			knownFinalThumbnailFormat,
+			outputPath.toFile(),
 		)
 
 		thumbnailPath.deleteIfExists()

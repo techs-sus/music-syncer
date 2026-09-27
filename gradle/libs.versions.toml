@@ -8,7 +8,7 @@ kotlinx-coroutines-core = "1.11.0"
 kotlinx-io-core = "0.9.1"
 jaudiotagger = "2.0.32"
 clikt = "5.1.0"
-scrimage = "4.6.7"
+twelvemonkeys = "3.15.2"
 mordant = "3.1.0"
 slf4j = "2.0.19"
 
@@ -27,8 +27,9 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version.ref = "kotlinx-io-core" }
 jaudiotagger = { module = "com.github.RouHim:jaudiotagger", version.ref = "jaudiotagger" }
 clikt = { module = "com.github.ajalt.clikt:clikt", version.ref = "clikt" }
-scrimage = { module = "com.sksamuel.scrimage:scrimage-core", version.ref = "scrimage" }
-scrimage-webp = { module = "com.sksamuel.scrimage:scrimage-webp", version.ref = "scrimage" }
+imageio-core = { module = "com.twelvemonkeys.imageio:imageio-core", version.ref = "twelvemonkeys" }
+imageio-jpeg = { module = "com.twelvemonkeys.imageio:imageio-jpeg", version.ref = "twelvemonkeys" }
+imageio-webp = { module = "com.twelvemonkeys.imageio:imageio-webp", version.ref = "twelvemonkeys" }
 mordant = { module = "com.github.ajalt.mordant:mordant", version.ref = "mordant" }
 mordant-coroutines = { module = "com.github.ajalt.mordant:mordant-coroutines", version.ref = "mordant" }
 slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }

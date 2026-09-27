@@ -5,12 +5,14 @@ import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
 import java.nio.file.Path
+import javax.imageio.ImageIO
 import kotlin.io.path.createDirectory
 import kotlin.io.path.deleteIfExists
 
 suspend fun main() {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
+	ImageIO.scanForPlugins()
 
 	val temporaryFolder = Path.of(SystemTemporaryDirectory.toString(), "music-syncer-kotlin-native-agent")
 

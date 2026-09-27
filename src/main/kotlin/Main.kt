@@ -25,6 +25,7 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import java.nio.file.Files
+import javax.imageio.ImageIO
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.extension
 import kotlin.io.path.nameWithoutExtension
@@ -199,6 +200,8 @@ class PlaylistCommand : SuspendingCliktCommand() {
 suspend fun main(args: Array<String>) {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
+
+	ImageIO.scanForPlugins()
 
 	try {
 		MusicSyncerKotlin().subcommands(

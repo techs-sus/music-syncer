@@ -86,8 +86,10 @@ dependencies {
 	implementation(libs.kotlinx.io.core)
 
 	implementation(libs.jaudiotagger)
-	implementation(libs.scrimage)
-	implementation(libs.scrimage.webp)
+
+	implementation(libs.imageio.core)
+	implementation(libs.imageio.jpeg)
+	implementation(libs.imageio.webp)
 
 	implementation(libs.clikt)
 
