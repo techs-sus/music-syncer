@@ -61,6 +61,7 @@
     '';
 
     postFixup = old.postFixup + ''
-      wrapProgram $out/bin/music-syncer-kotlin --prefix PATH : "${lib.getBin ffmpeg}/bin"
+      wrapProgram $out/bin/music-syncer-kotlin --prefix PATH : "${lib.getBin ffmpeg}/bin" \
+        --prefix LD_LIBRARY_PATH : ${java}/lib:${java}/lib/server
     '';
   })
