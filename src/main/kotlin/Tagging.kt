@@ -64,7 +64,8 @@ object Tagging {
 
 		val outputPath = thumbnailPath.resolveSibling("${thumbnailPath.nameWithoutExtension}.$knownFinalThumbnailExtension")
 
-		val image = ImageIO.read(thumbnailPath.toFile())
+		val image = ImageIO.read(thumbnailPath.toFile()) ?: throw FailedReadingUntaggableThumbnail()
+
 		ImageIO.write(
 			image,
 			knownFinalThumbnailFormat,

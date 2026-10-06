@@ -71,6 +71,8 @@ class PlaylistIsInfinite : ProjectException("playlist is infinite"), HumanReadab
 	}
 }
 
+class FailedReadingUntaggableThumbnail : ProjectException("failed reading untaggable thumbnail")
+
 fun assertExtractorIsFinite(extractor: PlaylistExtractor) {
 	if (extractor.playlistType != PlaylistInfo.PlaylistType.NORMAL) throw PlaylistIsInfinite()
 }

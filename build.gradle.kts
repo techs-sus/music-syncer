@@ -97,6 +97,9 @@ dependencies {
 
 	implementation(libs.slf4j.nop)
 
+	// only needed to compile JcodecBoxReflectionFeature, which is never loaded on the JVM
+	compileOnly(libs.nativeimage)
+
 	testImplementation(kotlin("test"))
 }
 

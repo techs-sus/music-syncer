@@ -13,8 +13,10 @@ mordant = "3.1.0"
 slf4j = "2.0.19"
 
 graalvmNative = "1.1.13"
+graalvmNativeImage = "25.0.4"
 
 [libraries]
+nativeimage = { module = "org.graalvm.sdk:nativeimage", version.ref = "graalvmNativeImage" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-brotli = { module = "com.squareup.okhttp3:okhttp-brotli", version.ref = "okhttp" }
 okhttp-coroutines = { module = "com.squareup.okhttp3:okhttp-coroutines", version.ref = "okhttp" }
