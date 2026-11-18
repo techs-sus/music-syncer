@@ -1,19 +1,19 @@
 [versions]
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 
-newpipeextractor = "0.26.5"
-sqldelight = "2.3.2"
-okhttp = "5.5.0"
+newpipeextractor = "0.27.1"
+sqldelight = "2.4.1"
+okhttp = "5.5.1"
 kotlinx-coroutines-core = "1.11.0"
-kotlinx-io-core = "0.9.1"
-jaudiotagger = "2.0.32"
-clikt = "5.1.0"
-twelvemonkeys = "3.15.2"
-mordant = "3.1.0"
-slf4j = "2.0.19"
+kotlinx-io-core = "0.9.3"
+jaudiotagger = "2.0.40"
+clikt = "5.2.0"
+twelvemonkeys = "3.15.3"
+mordant = "3.1.1"
+slf4j = "2.0.20"
 
-graalvmNative = "1.1.13"
-graalvmNativeImage = "25.0.4"
+graalvmNativePlugin = "1.1.19"
+graalvmNativeImage = "25.5.5.0.3"
 
 [libraries]
 nativeimage = { module = "org.graalvm.sdk:nativeimage", version.ref = "graalvmNativeImage" }
@@ -37,4 +37,4 @@ slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 
 [plugins]
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
-graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvmNative" }
+graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvmNativePlugin" }

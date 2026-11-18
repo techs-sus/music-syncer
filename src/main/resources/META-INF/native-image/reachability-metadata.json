@@ -14,22 +14,7 @@
       "type": "com.github.ajalt.mordant.terminal.terminalinterface.nativeimage.TerminalInterfaceProviderNativeImage"
     },
     {
-      "type": "com.google.protobuf.DescriptorMessageInfoFactory"
-    },
-    {
       "type": "com.google.protobuf.GeneratedMessage"
-    },
-    {
-      "type": "com.google.protobuf.ListFieldSchemaFull"
-    },
-    {
-      "type": "com.google.protobuf.MapFieldSchemaFull"
-    },
-    {
-      "type": "com.google.protobuf.NewInstanceSchemaFull"
-    },
-    {
-      "type": "com.google.protobuf.UnknownFieldSetSchema"
     },
     {
       "type": "com.sun.crypto.provider.AESCipher$General",
@@ -421,6 +406,9 @@
           ]
         }
       ]
+    },
+    {
+      "type": "java.lang.String"
     },
     {
       "type": "java.lang.System",
@@ -1244,6 +1232,36 @@
             "long",
             "long"
           ]
+        }
+      ]
+    },
+    {
+      "type": "sun.management.VMManagementImpl",
+      "jniAccessible": true,
+      "fields": [
+        {
+          "name": "compTimeMonitoringSupport"
+        },
+        {
+          "name": "currentThreadCpuTimeSupport"
+        },
+        {
+          "name": "objectMonitorUsageSupport"
+        },
+        {
+          "name": "otherThreadCpuTimeSupport"
+        },
+        {
+          "name": "remoteDiagnosticCommandsSupport"
+        },
+        {
+          "name": "synchronizerUsageSupport"
+        },
+        {
+          "name": "threadAllocatedMemorySupport"
+        },
+        {
+          "name": "threadContentionMonitoringSupport"
         }
       ]
     },
