@@ -13,6 +13,10 @@ import kotlin.io.path.deleteRecursively
 suspend fun main() {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
+
+	// scanning for plugins requires the xawt jdk library
+	// we do this to ensure all plugins that can be used have verification metadata written for them
+	// we cannot do this in Main.kt because xawt should never be required to run the actual program
 	ImageIO.scanForPlugins()
 
 	val temporaryFolder = Path.of(SystemTemporaryDirectory.toString(), "music-syncer-kotlin-native-agent")

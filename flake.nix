@@ -32,8 +32,8 @@
           };
 
           package = pkgs.callPackage ./package.nix {
-            inherit gradle;
-            inherit java;
+            inherit gradle java;
+            ffmpeg = pkgs.ffmpeg-headless;
           };
         in
         {
@@ -45,20 +45,18 @@
             config = { };
           };
 
-          devShells.default =
+          devShells.default = pkgs.mkShell {
+            packages = with pkgs; [
+              java
+              gradle
+              kotlin
+              ffmpeg
 
-            pkgs.mkShell {
-              packages = with pkgs; [
-                java
-                gradle
-                kotlin
-                ffmpeg
+              package.updateVerificationMetadata
+            ];
 
-                package.updateVerificationMetadata
-              ];
-
-              JAVA_HOME = "${java}";
-            };
+            JAVA_HOME = "${java}";
+          };
 
           packages.default = package;
 

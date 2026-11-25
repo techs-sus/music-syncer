@@ -1,9 +1,17 @@
 {
   lib,
+  stdenv,
   java,
   gradle,
   buildGradleApplication,
   ffmpeg,
+  patchelf,
+  removeReferencesTo,
+  bzip2,
+  brotli,
+  freetype,
+  libpng,
+  zlib,
   ...
 }:
 (buildGradleApplication {
@@ -26,8 +34,6 @@
         "gradlew"
       ];
   };
-
-  buildInputs = [ ffmpeg ];
 
   repositories = [
     "https://plugins.gradle.org/m2/"
@@ -54,14 +60,55 @@
   };
 }).overrideAttrs
   (old: {
+    nativeBuildInputs = old.nativeBuildInputs ++ [
+      patchelf
+      removeReferencesTo
+    ];
+
+    buildInputs = old.buildInputs or [ ] ++ [
+      bzip2
+      brotli
+      freetype
+      libpng
+      zlib
+      stdenv.cc.cc.lib
+    ];
+
+    # graal native image emits required JDK shared libraries (such as AWT) alongside the executable
+    # libawt_xawt.so pulls X11 and our app is headless, so we skip it
     installPhase = ''
       install -Dm755 \
       	build/native/nativeCompile/music-syncer-kotlin \
       		$out/bin/music-syncer-kotlin
+
+      mkdir -p $out/lib
+      for lib in build/native/nativeCompile/*.so; do
+        name="$(basename "$lib")"
+        [ "$name" = "libawt_xawt.so" ] && continue
+        install -Dm644 "$lib" "$out/lib/$name"
+      done
     '';
 
-    postFixup = old.postFixup + ''
-      wrapProgram $out/bin/music-syncer-kotlin --prefix PATH : "${lib.getBin ffmpeg}/bin" \
-        --prefix LD_LIBRARY_PATH : ${java}/lib:${java}/lib/server
+    # the copied JDK libraries will likely have RPATHs pointing into the graalvm store
+    # replace them with $out/lib references
+    postFixup = ''
+      rpath="$out/lib:${
+        lib.makeLibraryPath [
+          bzip2
+          brotli
+          freetype
+          libpng
+          zlib
+          stdenv.cc.cc.lib
+        ]
+      }"
+      for lib in $out/lib/*.so; do
+        patchelf --set-rpath "$rpath" "$lib"
+        remove-references-to -t ${java} "$lib" || true
+      done
+
+      wrapProgram $out/bin/music-syncer-kotlin \
+        --prefix PATH : "${lib.getBin ffmpeg}/bin" \
+        --prefix LD_LIBRARY_PATH : "$out/lib"
     '';
   })

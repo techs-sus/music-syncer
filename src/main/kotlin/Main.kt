@@ -201,8 +201,6 @@ suspend fun main(args: Array<String>) {
 	val downloader = PipeDownloaderImpl.init(OkHttpClient.Builder())
 	NewPipe.init(downloader, Localization("en", "US"))
 
-	ImageIO.scanForPlugins()
-
 	try {
 		MusicSyncerKotlin().subcommands(
 			PlaylistCommand().subcommands(InitCommand(), SyncCommand(), WriteToM3uCommand()),

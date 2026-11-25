@@ -7,7 +7,8 @@ plugins {
 
 application {
 	mainClass.set("com.github.techs_sus.MainKt")
-	applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
+	applicationDefaultJvmArgs =
+		listOf("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow", "-Djava.awt.headless=true")
 }
 
 graalvmNative {
