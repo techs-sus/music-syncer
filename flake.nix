@@ -17,7 +17,14 @@
       perSystem =
         { system, pkgs, ... }:
         let
-          java = pkgs.graalvmPackages.graalvm-ce;
+          java = pkgs.graalvmPackages.graalvm-ce.overrideAttrs (old: {
+            # native image links glibc's static libm.a which is incompatible
+            # with the dynamically linked libc on glibc >= 2.38 as _dl_x86_cpu_features is in static libc
+            postFixup = (old.postFixup or "") + ''
+              substituteInPlace $out/bin/.native-image-wrapped_ \
+                --replace-fail " -H:CLibraryPath=${pkgs.glibc.static}/lib" ""
+            '';
+          });
 
           gradle = pkgs.gradleFromWrapper {
             wrapperPropertiesPath = ./gradle/wrapper/gradle-wrapper.properties;
